@@ -1,6 +1,6 @@
 import mongoose, { Document, Schema } from "mongoose";
 
-export interface ChatDocument extends Document {
+export interface ConversationDocument extends Document {
   participants: mongoose.Types.ObjectId[];
   lastMessage?: mongoose.Types.ObjectId;
   lastActivityAt?: Date;
@@ -11,7 +11,7 @@ export interface ChatDocument extends Document {
   updatedAt: Date;
 }
 
-const chatSchema = new Schema<ChatDocument>(
+const conversationSchema = new Schema<ConversationDocument>(
   {
     participants: [
       {
@@ -55,5 +55,8 @@ const chatSchema = new Schema<ChatDocument>(
   },
 );
 
-const ChatModel = mongoose.model<ChatDocument>("Chat", chatSchema);
-export default ChatModel;
+const ConversationModel = mongoose.model<ConversationDocument>(
+  "Conversation",
+  conversationSchema,
+);
+export default ConversationModel;

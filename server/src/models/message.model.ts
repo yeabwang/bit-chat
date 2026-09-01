@@ -17,7 +17,7 @@ const messageSchema = new Schema<MessageDocument>(
   {
     conversationId: {
       type: Schema.Types.ObjectId,
-      ref: "Chat",
+      ref: "Conversation",
       required: true,
       index: true,
     },
