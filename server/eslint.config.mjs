@@ -24,5 +24,9 @@ export default [
       "no-console": ["warn", { allow: ["warn", "error"] }],
     },
   },
+  {
+    files: ["src/index.ts", "src/config/**/*.ts"],
+    rules: { "no-console": "off" },
+  },
   prettier,
 ];

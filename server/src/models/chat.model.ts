@@ -1,0 +1,59 @@
+import mongoose, { Document, Schema } from "mongoose";
+
+export interface ChatDocument extends Document {
+  participants: mongoose.Types.ObjectId[];
+  lastMessage?: mongoose.Types.ObjectId;
+  lastActivityAt?: Date;
+  isGroup: boolean;
+  groupName?: string;
+  createdBy: mongoose.Types.ObjectId;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const chatSchema = new Schema<ChatDocument>(
+  {
+    participants: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "User",
+        required: true,
+      },
+    ],
+
+    isGroup: {
+      type: Boolean,
+      required: true,
+      default: false,
+    },
+
+    groupName: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+
+    createdBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+
+    lastMessage: {
+      type: Schema.Types.ObjectId,
+      ref: "Message",
+      default: null,
+    },
+
+    lastActivityAt: {
+      type: Date,
+      default: null,
+    },
+  },
+  {
+    timestamps: true,
+  },
+);
+
+const ChatModel = mongoose.model<ChatDocument>("Chat", chatSchema);
+export default ChatModel;

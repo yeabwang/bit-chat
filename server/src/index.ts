@@ -5,6 +5,8 @@ import cors from "cors";
 import { Env } from "./config/env.config";
 import { asyncHandler } from "./middlewares/asyncHandler.middleware";
 import { HTTPSTATUS } from "./config/http.config";
+import { errorHandler } from "./middlewares/errorHandler.middleware";
+import connectDatabase from "./config/database.config";
 
 const app = express();
 
@@ -28,7 +30,10 @@ app.get(
   }),
 );
 
-app.listen(Env.PORT, () => {
-  // eslint-disable-next-line no-console
-  console.log(`Server running on port ${Env.PORT} in ${Env.NODE_ENV} mode`);
+app.use(errorHandler);
+
+connectDatabase().then(() => {
+  app.listen(Env.PORT, () => {
+    console.log(`Server running on port ${Env.PORT} in ${Env.NODE_ENV} mode`);
+  });
 });
