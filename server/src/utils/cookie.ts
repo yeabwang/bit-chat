@@ -15,7 +15,7 @@ const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const cookieOptions = {
   httpOnly: true,
   secure: Env.NODE_ENV === "production",
-  sameSite: (Env.NODE_ENV === "production" ? "strict" : "lax") as "strict" | "lax",
+  sameSite: (Env.NODE_ENV === "production" ? "none" : "lax") as "none" | "lax",
   path: "/",
 };
 

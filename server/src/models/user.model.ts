@@ -3,8 +3,8 @@ import { compareValue, hashValue } from "../utils/bcrypt";
 
 export interface UserDocument extends Document {
   name: string;
-  userName?: string;
-  password?: string;
+  userName: string;
+  password: string;
   avatar?: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -31,7 +31,7 @@ const userSchema = new Schema<UserDocument>(
   {
     timestamps: true,
     toJSON: {
-      transform: (_doc, ret) => {
+      transform: (_doc, ret: Record<string, unknown>) => {
         delete ret.password;
         return ret;
       },
@@ -47,6 +47,7 @@ userSchema.pre("save", async function (next) {
 });
 
 userSchema.methods.comparePassword = async function (val: string) {
+  // password is required by the schema but can be projected away, as getUsersService does
   if (!this.password) return false;
   return compareValue(val, this.password);
 };

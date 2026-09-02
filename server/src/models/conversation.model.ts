@@ -2,10 +2,11 @@ import mongoose, { Document, Schema } from "mongoose";
 
 export interface ConversationDocument extends Document {
   participants: mongoose.Types.ObjectId[];
-  lastMessage?: mongoose.Types.ObjectId;
-  lastActivityAt?: Date;
+  lastMessage?: mongoose.Types.ObjectId | null;
+  lastActivityAt: Date;
   isGroup: boolean;
-  groupName?: string;
+  groupName?: string | null;
+  dmKey?: string;
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -33,6 +34,11 @@ const conversationSchema = new Schema<ConversationDocument>(
       default: null,
     },
 
+    // the two participant ids of a DM, sorted and joined. only constrains DMs.
+    dmKey: {
+      type: String,
+    },
+
     createdBy: {
       type: Schema.Types.ObjectId,
       ref: "User",
@@ -45,15 +51,23 @@ const conversationSchema = new Schema<ConversationDocument>(
       default: null,
     },
 
+    // new, empty conversation sorts to the top; the message layer bumps it on every send.
     lastActivityAt: {
       type: Date,
-      default: null,
+      default: Date.now,
     },
   },
   {
     timestamps: true,
   },
 );
+
+conversationSchema.index(
+  { dmKey: 1 },
+  { unique: true, partialFilterExpression: { dmKey: { $type: "string" } } },
+);
+
+conversationSchema.index({ participants: 1, lastActivityAt: -1 });
 
 const ConversationModel = mongoose.model<ConversationDocument>(
   "Conversation",

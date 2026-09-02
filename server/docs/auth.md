@@ -24,29 +24,11 @@ Requests and responses are `application/json`.
 | Contents   | JWT, HS256,`{ userId }`, `aud: "user"`       |
 | Lifetime   | 7 days - token and cookie expire together    |
 | `httpOnly` | `true`                                       |
-| `secure`   | `true`                                       |
-| `sameSite` | `strict` in production, `lax` in development |
+| `secure`   | `true` in production, `false` in development |
+| `sameSite` | `none` in production, `lax` in development   |
 | `path`     | `/`                                          |
 
 Browser clients must send `credentials: "include"` on every request; the server's CORS is locked to `CLIENT_ORIGIN`.
-
----
-
-## The user object
-
-Returned by `register`, `login` and `status`. `password` is stripped by the model's `toJSON` transform
-
-```json
-{
-  "name": "Yeabsira Tesfaye",
-  "userName": "yeabwang",
-  "avatar": "https://avatars.githubusercontent.com/u/122813658?v=4",
-  "_id": "6a96d943c9e433d4bf56f83c",
-  "createdAt": "2026-09-01T13:55:15.440Z",
-  "updatedAt": "2026-09-01T13:55:15.440Z",
-  "__v": 0
-}
-```
 
 ---
 
@@ -186,6 +168,16 @@ No request body. Reads the `accessToken` cookie.
 | `401`  | Cookie missing, invalid, expired, or the user no longer exists | `{ "message": "Not authenticated", "errorCode": "ERR_UNAUTHORIZED" }` |
 
 Use this on client startup to restore a session - the cookie is `httpOnly`, so the browser cannot inspect it directly.
+
+---
+
+## Unknown routes
+
+Anything not matched under `/api` answers `404` through the same envelope.
+
+```json
+{ "message": "Route not found", "errorCode": "ERR_NOT_FOUND" }
+```
 
 ---
 
