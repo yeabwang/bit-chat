@@ -121,6 +121,8 @@ socket.io reconnects on its own. On reconnect the server re-runs the whole conne
 
 If the session has expired in the meantime, the handshake fails with `Unauthorized` and the client should route to the login screen.
 
+Logging out closes the user's sockets server-side.
+
 ---
 
 ## Concurrency

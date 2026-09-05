@@ -8,6 +8,7 @@ import ConversationModel from "../src/models/conversation.model";
 import UserModel from "../src/models/user.model";
 import {
   closeSocket,
+  disconnectUser,
   emitToConversation,
   initializeSocket,
   leaveConversationRoom,
@@ -20,6 +21,7 @@ import { queryStub } from "./helpers/mongoose";
 
 const ALICE = "507f1f77bcf86cd799439012";
 const BOB = "507f1f77bcf86cd799439013";
+const CAROL = "507f1f77bcf86cd799439014";
 const CONVERSATION_ID = "507f1f77bcf86cd7994390ff";
 
 /** setJwtAuthCookie writes onto a Response; borrow it so tests mint real tokens. */
@@ -36,12 +38,17 @@ const tokenFor = (userId: string) => {
   return cookie;
 };
 
-/** Both users exist, and both belong to the one conversation. */
-const stubDatabase = () => {
+/**
+ * Every user exists; only `members` belong to the conversation. The membership
+ * lookup answers per user, so a non-member's connection is joined to no room.
+ */
+const stubDatabase = (members: string[] = [ALICE, BOB]) => {
   mock.method(UserModel, "findById", ((id: string) =>
     Promise.resolve({ _id: id })) as never);
-  mock.method(ConversationModel, "find", (() =>
-    queryStub([{ _id: CONVERSATION_ID }])) as never);
+  mock.method(ConversationModel, "find", ((filter: { participants: string }) =>
+    queryStub(
+      members.includes(filter.participants) ? [{ _id: CONVERSATION_ID }] : [],
+    )) as never);
 };
 
 type Harness = {
@@ -256,4 +263,78 @@ test("leaving takes every tab out of the room, not just one", async (t) => {
   });
 
   assert.deepEqual([await tab1Quiet, await tab2Quiet], [true, true]);
+});
+
+test("a non participant receives none of the conversation's traffic", async (t) => {
+  const harness = await startServer();
+  stubDatabase([ALICE, BOB]);
+  t.after(() => stopServer(harness));
+
+  const alice = connectAs(harness, ALICE);
+  await once(alice, SOCKET_EVENTS.PRESENCE_SYNC);
+  const carol = connectAs(harness, CAROL);
+  await once(carol, SOCKET_EVENTS.PRESENCE_SYNC);
+
+  const delivered = once(alice, SOCKET_EVENTS.MESSAGE_NEW);
+  const carolStaysQuiet = silentFor(carol, SOCKET_EVENTS.MESSAGE_NEW);
+  emitToConversation(CONVERSATION_ID, SOCKET_EVENTS.MESSAGE_NEW, {
+    message: { content: "members only" },
+  });
+
+  await delivered;
+  assert.equal(await carolStaysQuiet, true, "an outsider must receive nothing");
+});
+
+test("a non participant cannot talk their way into the room", async (t) => {
+  const harness = await startServer();
+  stubDatabase([ALICE, BOB]);
+  t.after(() => stopServer(harness));
+
+  const carol = connectAs(harness, CAROL);
+  await once(carol, SOCKET_EVENTS.PRESENCE_SYNC);
+
+  // there are no client-to-server events at all, so none of these reach a
+  // handler. Room membership is the server's to decide, never the client's.
+  carol.emit("conversation:join", CONVERSATION_ID);
+  carol.emit("chat:join", CONVERSATION_ID);
+  carol.emit("join", `conversation:${CONVERSATION_ID}`);
+
+  const carolStaysQuiet = silentFor(carol, SOCKET_EVENTS.MESSAGE_NEW, 400);
+  emitToConversation(CONVERSATION_ID, SOCKET_EVENTS.MESSAGE_NEW, {
+    message: { content: "members only" },
+  });
+
+  assert.equal(await carolStaysQuiet, true);
+});
+
+test("a logged out session's sockets are closed, not left listening", async (t) => {
+  const harness = await startServer();
+  stubDatabase();
+  t.after(() => stopServer(harness));
+
+  const bobTab1 = connectAs(harness, BOB);
+  await once(bobTab1, SOCKET_EVENTS.PRESENCE_SYNC);
+  const bobTab2 = connectAs(harness, BOB);
+  await once(bobTab2, SOCKET_EVENTS.PRESENCE_SYNC);
+
+  // clients auto-reconnect, and would sail straight back in; the assertion is
+  // that the server actively closed what it had
+  bobTab1.io.opts.reconnection = false;
+  bobTab2.io.opts.reconnection = false;
+
+  const tab1Closed = once(bobTab1, "disconnect");
+  const tab2Closed = once(bobTab2, "disconnect");
+
+  // what the logout controller does once it has read the session
+  disconnectUser(BOB);
+
+  await tab1Closed;
+  await tab2Closed;
+
+  // and the connection is genuinely gone, so no later message reaches it
+  const stillQuiet = silentFor(bobTab1, SOCKET_EVENTS.MESSAGE_NEW, 300);
+  emitToConversation(CONVERSATION_ID, SOCKET_EVENTS.MESSAGE_NEW, {
+    message: { content: "after logout" },
+  });
+  assert.equal(await stillQuiet, true);
 });

@@ -126,19 +126,6 @@ export const getSingleConversationService = async (
   return conversation;
 };
 
-export const validateConversationParticipant = async (
-  conversationId: string,
-  userId: Types.ObjectId,
-) => {
-  const conversation = await ConversationModel.findOne({
-    _id: conversationId,
-    participants: userId,
-  });
-  if (!conversation)
-    throw new NotFoundException("Conversation not found or you are not a participant");
-  return conversation;
-};
-
 export const MAX_GROUP_MEMBERS = 100;
 
 export const addMembersService = async (

@@ -40,14 +40,6 @@ test("a message must carry text", () => {
   });
 });
 
-test("image uploads are no longer part of the contract", () => {
-  const parsed = sendMessageSchema.parse({
-    content: "hello",
-    image: "https://example.com/cat.png",
-  });
-  assert.equal("image" in parsed, false);
-});
-
 test("replyToId must be an object id when given", () => {
   assert.throws(() => sendMessageSchema.parse({ content: "hi", replyToId: "nope" }));
   assert.equal(

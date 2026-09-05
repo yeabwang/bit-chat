@@ -119,6 +119,27 @@ A conversation with no messages is `200` with `"items": []`, `"hasMore": false`,
 2. Scrolled to the top and `hasMore` is `true`: `GET /api/conversations/:id/messages?cursor=<nextCursor>`.
 3. Prepend the new `items` ahead of what you already have. Repeat until `hasMore` is `false`.
 
+## Ordering and concurrency
+
+The cursor is a message `_id`, and paging walks strictly backwards with `_id < cursor`. `_id` rather than `createdAt`, because an ObjectId is unique **and** time-ordered, so it is a total order over the conversation. `createdAt` ties whenever two messages land in the same millisecond, and a tied cursor either repeats a row on the next page or skips one. `{ conversationId: 1, _id: -1 }` is indexed to match, so the sort is served by the index rather than done in memory.
+
+Sending does two writes: the insert, then one guarded update that moves the conversation's pointer.
+
+```js
+await ConversationModel.updateOne(
+  { _id: conversationId, lastActivityAt: { $lt: message.createdAt } },
+  { $set: { lastMessage: message._id, lastActivityAt: message.createdAt } },
+);
+```
+
+The `$lt` clause is the point. Loading the conversation, assigning `lastMessage` and calling `save()` is a read-modify-write: two messages arriving together both read the old document, and whichever commits second wins - even when it carries the **older** message, leaving the sidebar pointing at something that is not the latest.
+
+Making the update conditional on the timestamp moving forward gives a real invariant: **`lastActivityAt` is monotonic**. It can only increase, so the pointer and the timestamp stay consistent no matter which request commits second. Whoever loses the race matches nothing and writes nothing.
+
+`lastActivityAt` is also what the conversation list sorts on, so this one update is what reorders every participant's sidebar.
+
+---
+
 ## Error envelopes
 
 Identical to [`auth`](./auth.md#error-envelopes) - every error goes through the same handler.

@@ -123,6 +123,11 @@ export const leaveConversationRoom = (userId: string, conversationId: string) =>
   io?.in(userRoom(userId)).socketsLeave(conversationRoom(conversationId));
 };
 
+// Drop every live socket belonging to a user.
+export const disconnectUser = (userId: string) => {
+  io?.in(userRoom(userId)).disconnectSockets(true);
+};
+
 export const closeSocket = async () => {
   await io?.close();
   io = null;
