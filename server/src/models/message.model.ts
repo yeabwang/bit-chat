@@ -4,8 +4,7 @@ export interface MessageDocument extends Document {
   conversationId: mongoose.Types.ObjectId;
   sender: mongoose.Types.ObjectId;
 
-  content?: string;
-  image?: string;
+  content: string;
 
   replyTo?: mongoose.Types.ObjectId | null;
 
@@ -30,11 +29,8 @@ const messageSchema = new Schema<MessageDocument>(
 
     content: {
       type: String,
+      required: true,
       trim: true,
-    },
-
-    image: {
-      type: String,
     },
 
     replyTo: {
