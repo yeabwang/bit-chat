@@ -1,4 +1,5 @@
 import "dotenv/config";
+import http from "http";
 import express, { NextFunction, Request, Response } from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
@@ -10,6 +11,7 @@ import { HTTPSTATUS } from "./config/http.config";
 import { errorHandler } from "./middlewares/errorHandler.middleware";
 import { NotFoundException } from "./utils/app-error";
 import connectDatabase from "./config/database.config";
+import { initializeSocket } from "./lib/socket";
 import routes from "./routes";
 import "./config/passport.config";
 
@@ -45,8 +47,11 @@ app.use((_req: Request, _res: Response, next: NextFunction) =>
 
 app.use(errorHandler);
 
+const server = http.createServer(app);
+initializeSocket(server);
+
 connectDatabase().then(() => {
-  app.listen(Number(Env.PORT), () => {
+  server.listen(Number(Env.PORT), () => {
     console.log(`Server running on port ${Env.PORT} in ${Env.NODE_ENV} mode`);
   });
 });

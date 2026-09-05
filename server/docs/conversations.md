@@ -3,11 +3,16 @@
 Base URL (dev): `http://localhost:8000`
 All conversation routes are mounted under `/api/conversations`.
 
-| Method | Path                     | Auth required | Purpose                               |
-| ------ | ------------------------ | ------------- | ------------------------------------- |
-| POST   | `/api/conversations`     | yes           | Open a DM, or create a group          |
-| GET    | `/api/conversations`     | yes           | List the caller's conversations       |
-| GET    | `/api/conversations/:id` | yes           | Read one conversation and its history |
+| Method | Path                                | Auth required | Purpose                         |
+| ------ | ----------------------------------- | ------------- | ------------------------------- |
+| POST   | `/api/conversations`                | yes           | Open a DM, or create a group    |
+| GET    | `/api/conversations`                | yes           | List the caller's conversations |
+| GET    | `/api/conversations/:id`            | yes           | Read one conversation           |
+| PATCH  | `/api/conversations/:id`            | yes           | Rename a group                  |
+| POST   | `/api/conversations/:id/members`    | yes           | Add members to a group          |
+| DELETE | `/api/conversations/:id/members/me` | yes           | Leave a group                   |
+
+Messages live under the same prefix and are documented separately in [`messages`](./messages.md). Every write here also produces a socket event; the catalogue is in [`protocol`](./protocol.md).
 
 Requests and responses are `application/json`. Every route sits behind the session cookie described in [`auth`](./auth.md); a missing or invalid cookie is `401 Not authenticated` before the handler runs.
 
@@ -251,7 +256,7 @@ An empty list is `200` with `"conversations": []`.
 
 No request body. `:id` is a conversation id and must be a 24 character hex object id; anything else is a `400` for failling validation
 
-`messages` is ordered oldest first, so the client can append and scroll to the bottom. `replyTo`, when set, is populated with `content`, `image` and its own `sender`.
+Returns the conversation only.
 
 | Status | When                                          | Body                                                                   |
 | ------ | --------------------------------------------- | ---------------------------------------------------------------------- |
@@ -292,10 +297,78 @@ Both cases answer `404` with the same message on purpose. A `403` would tell a s
       }
     ],
     "updatedAt": "2026-09-02T08:28:59.344Z"
-  },
-  "messages": []
+  }
 }
 ```
+
+---
+
+## PATCH /api/conversations/:id
+
+Renames a group. Any member may rename; there is no owner or admin role.
+
+```json
+{ "groupName": "Coding group v2" }
+```
+
+| Field       | Required | Rules                    |
+| ----------- | -------- | ------------------------ |
+| `groupName` | yes      | trimmed, 1-60 characters |
+
+| Status | When                                          | Body                                                                    |
+| ------ | --------------------------------------------- | ----------------------------------------------------------------------- |
+| `200`  | Renamed                                       | `{ "message": "Group renamed", "conversation": { ... } }`               |
+| `400`  | Body failed validation                        | validation error envelope                                               |
+| `400`  | The conversation is a DM                      | `{ "message": "This action is only available on group conversations" }` |
+| `401`  | No session                                    | `{ "message": "Not authenticated", ... }`                               |
+| `404`  | No such conversation,**or** not a participant | `{ "message": "Conversation not found or you are not a participant" }`  |
+
+Emits `conversation:updated` to the group.
+
+---
+
+## POST /api/conversations/:id/members
+
+Adds members to a group. Any member may add.
+
+```json
+{ "members": ["6a97d99ff2e2a731973f333d", "6a97d9bef2e2a731973f3340"] }
+```
+
+| Field     | Required | Rules           |
+| --------- | -------- | --------------- |
+| `members` | yes      | 1-50 object ids |
+
+Ids are de-duplicated before the write, and the write is `$addToSet`, so adding someone who is already a member is a no-op rather than a duplicate entry. A group holds at most **100** participants.
+
+| Status | When                                          | Body                                                                    |
+| ------ | --------------------------------------------- | ----------------------------------------------------------------------- |
+| `200`  | Added, or already members                     | `{ "message": "Members added", "conversation": { ... } }`               |
+| `400`  | Body failed validation                        | validation error envelope                                               |
+| `400`  | The conversation is a DM                      | `{ "message": "This action is only available on group conversations" }` |
+| `400`  | The group is full                             | `{ "message": "The group has reached its member limit" }`               |
+| `401`  | No session                                    | `{ "message": "Not authenticated", ... }`                               |
+| `404`  | A named user does not exist                   | `{ "message": "One or more users do not exist" }`                       |
+| `404`  | No such conversation,**or** not a participant | `{ "message": "Conversation not found or you are not a participant" }`  |
+
+Existing members get `conversation:updated`; the new members are then put into the conversation room and get `conversation:new`. Their live sockets join in the same request, so they start receiving the group's messages without reconnecting.
+
+---
+
+## DELETE /api/conversations/:id/members/me
+
+Leaves a group. There is no body.
+
+| Status | When                                          | Body                                                                    |
+| ------ | --------------------------------------------- | ----------------------------------------------------------------------- |
+| `200`  | Left                                          | `{ "message": "Left the conversation" }`                                |
+| `400`  | The conversation is a DM                      | `{ "message": "This action is only available on group conversations" }` |
+| `401`  | No session                                    | `{ "message": "Not authenticated", ... }`                               |
+| `404`  | No such conversation,**or** not a participant | `{ "message": "Conversation not found or you are not a participant" }`  |
+
+The leaver is pulled out of `participants`, which is also what ends their access to the history - this endpoint, `GET /api/conversations/:id` and the messages endpoint all filter on membership, so a former member gets a `404`.
+
+Their sockets are taken out of the conversation room **before** any further event is emitted, so the leaver stops receiving the group's messages with no reconnect and no refresh.
 
 ---
 
@@ -311,6 +384,14 @@ conversationSchema.index(
 ```
 
 Creation is a single `findOneAndUpdate` with `upsert: true` and `$setOnInsert`. Whichever request lands second matches the existing document instead of inserting, and its response is `200` rather than `201`.
+
+The same principle covers membership. Leaving, adding and renaming are each **one** conditional update whose filter carries the authorisation:
+
+```js
+{ _id: conversationId, participants: userId, isGroup: true }
+```
+
+`$pull` and `$addToSet` are atomic and idempotent, so leaving twice or adding an existing member cannot corrupt the participant list. The 100-member cap rides in the same filter as an `$expr` on `$size`, so two concurrent adds cannot each see room for themselves and straddle it.
 
 ---
 
@@ -333,6 +414,13 @@ Sign in first (see `auth`); every step below sends the session cookie.
 7. **Unknown member** - repeat step 5 with `"participants": ["507f1f77bcf86cd7994390aa", <first id>]`. Expect `404`.
 8. **Empty body** - `POST /api/conversations` with `{}`. Expect `400`.
 9. **List** - `GET /api/conversations`. Expect both conversations, the group first because it was created last.
-10. **Read one** - `GET /api/conversations/<group id>`. Expect `200`, `"messages": []`.
+10. **Read one** - `GET /api/conversations/<group id>`. Expect `200` and the conversation, with no `messages` key.
 11. **Read a stranger's** - sign in as a third account not in that group and repeat step 10. Expect `404`.
 12. **Malformed id** - `GET /api/conversations/not-an-id`. Expect `400`.
+13. **Rename** - `PATCH /api/conversations/<group id>` with `{"groupName": "Coding group v2"}`. Expect `200`. Then `GET /api/conversations` and check the group did **not** move to the top.
+14. **Rename a DM** - repeat step 13 against the DM id. Expect `400`.
+15. **Add a member** - `POST /api/conversations/<group id>/members` with `{"members": ["<a fourth account id>"]}`. Expect `200` and four participants.
+16. **Add them again** - resend step 15. Expect `200` and still four participants.
+17. **Leave** - `DELETE /api/conversations/<group id>/members/me`. Expect `200`.
+18. **Confirm the door is shut** - repeat step 10. Expect `404`.
+19. **Leave a DM** - `DELETE /api/conversations/<dm id>/members/me`. Expect `400`.

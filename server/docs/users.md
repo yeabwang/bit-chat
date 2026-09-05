@@ -26,7 +26,8 @@ No request body, no query parameters.
       "avatar": "https://avatars.githubusercontent.com/u/218497123?v=4",
       "createdAt": "2026-09-02T08:08:34.921Z",
       "updatedAt": "2026-09-02T08:08:34.921Z",
-      "__v": 0
+      "__v": 0,
+      "isOnline": true
     }
   ]
 }
@@ -38,6 +39,12 @@ No request body, no query parameters.
 | `401`  | No session | `{ "message": "Not authenticated", "errorCode": "ERR_UNAUTHORIZED" }` |
 
 A directory with no other accounts in it is `200` with `"users": []`.
+
+### isOnline
+
+`isOnline` is computed per request from the live socket table and not stored.
+
+Use this endpoint for the initial state on page load, then keep it current from the `presence:online` and `presence:offline` socket events - see [`protocol`](./protocol.md). The socket also sends `presence:sync` on connect, which carries the same information; either is a valid starting point.
 
 ---
 

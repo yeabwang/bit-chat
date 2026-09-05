@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 import { Types } from "mongoose";
 import type { Request, RequestHandler, Response } from "express";
 import ConversationModel from "../src/models/conversation.model";
-import MessageModel from "../src/models/message.model";
 import UserModel from "../src/models/user.model";
 import {
   createConversationController,
@@ -57,7 +56,7 @@ const allUsersExist = () =>
 const upsertReturns = (updatedExisting: boolean) =>
   mock.method(ConversationModel, "findOneAndUpdate", (() =>
     Promise.resolve({
-      value: docStub({ _id: CONVERSATION_ID }),
+      value: docStub({ _id: CONVERSATION_ID, participants: [ME, ALICE] }),
       lastErrorObject: { updatedExisting },
     })) as never);
 
@@ -92,7 +91,9 @@ test("creating a group maps to 201", async (t) => {
   t.after(() => mock.restoreAll());
   allUsersExist();
   mock.method(ConversationModel, "create", (() =>
-    Promise.resolve(docStub({ _id: CONVERSATION_ID }))) as never);
+    Promise.resolve(
+      docStub({ _id: CONVERSATION_ID, participants: [ME, ALICE, BOB] }),
+    )) as never);
 
   const { status } = await call(createConversationController, {
     body: { isGroup: true, groupName: "Study", participants: [ALICE, BOB] },
@@ -119,11 +120,10 @@ test("listing conversations maps to 200", async (t) => {
   assert.deepEqual(body?.conversations, []);
 });
 
-test("reading a conversation returns it with its messages", async (t) => {
+test("reading a conversation returns it without a message list", async (t) => {
   t.after(() => mock.restoreAll());
   mock.method(ConversationModel, "findOne", (() =>
     queryStub(docStub({ _id: CONVERSATION_ID }))) as never);
-  mock.method(MessageModel, "find", (() => queryStub([])) as never);
 
   const { status, body } = await call(getSingleConversationController, {
     params: { id: CONVERSATION_ID },
@@ -131,7 +131,8 @@ test("reading a conversation returns it with its messages", async (t) => {
 
   assert.equal(status, 200);
   assert.ok(body?.conversation);
-  assert.deepEqual(body?.messages, []);
+  // history has its own paginated endpoint; two sources would drift
+  assert.equal("messages" in (body ?? {}), false);
 });
 
 test("a malformed conversation id is rejected before it reaches mongoose", async (t) => {
