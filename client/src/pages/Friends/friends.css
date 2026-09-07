@@ -1,0 +1,58 @@
+.center-screen { 
+    grid-column: 2 / -1; 
+    min-width: 0; 
+    min-height: 0; 
+    overflow: auto; 
+    background: var(--page); 
+    padding: clamp(20px, 5vw, 56px); 
+    box-sizing: border-box; 
+    display: flex; 
+    justify-content: center; 
+    align-items: flex-start; 
+}
+.friends-card, .settings-card { 
+    width: min(760px, 100%); 
+    margin: 0 auto; 
+    background: var(--panel); 
+    border: 1px solid var(--border); 
+    border-radius: 20px; 
+    padding: clamp(20px, 4vw, 36px); 
+    box-sizing: border-box; 
+}
+.friends-card h1, .settings-card h1 { 
+    margin: 0 0 24px; 
+    color: var(--text); 
+    font: 600 24px Poppins, 
+    sans-serif; 
+}
+.request-row { 
+    display: grid; 
+    grid-template-columns: auto minmax(0,1fr) auto; 
+    align-items: center; 
+    gap: 14px; 
+    padding: 16px 0; 
+    border-top: 1px solid var(--border); 
+}
+.request-row strong { 
+    color: var(--text); 
+    font: 500 14px Poppins, 
+    sans-serif; 
+}
+.request-row button { 
+    border: 0; 
+    border-radius: 18px; 
+    padding: 8px 12px; 
+    cursor: pointer; 
+    font: 500 11px Poppins, 
+    sans-serif; 
+}
+.accept { 
+    background: #0b018a; 
+    color: white; 
+}
+.decline { 
+    background: var(--hover); 
+    color: var(--text); 
+    margin-left: 6px; 
+}
+@media (max-width: 560px) { .request-row { grid-template-columns: auto 1fr; }.request-row > div { grid-column: 2; }.request-row button { margin: 0 6px 0 0; } }

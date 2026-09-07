@@ -1,0 +1,19 @@
+.avatar {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+.avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+.online-dot {
+  position: absolute;
+  right: -1px;
+  bottom: 0;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--panel);
+  border-radius: 50%;
+  background: #5fd17b;
+}
+.icon { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+.icon img { width: 100%; height: 100%; object-fit: contain; }
