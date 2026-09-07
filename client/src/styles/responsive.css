@@ -1,0 +1,17 @@
+@media (max-width: 1150px) {
+  .app { grid-template-columns: 200px 290px minmax(0, 1fr); }
+}
+
+@media (max-width: 860px) {
+  .app { width: 100%; height: 100dvh; min-height: 0; margin: 0; grid-template-columns: 1fr; grid-template-rows: auto minmax(0,1fr); }
+  .center-screen { grid-column: auto; }
+  .mobile-pane { display: block; min-height: 0; }
+  .mobile-pane.hidden { display: none; }
+  .mobile-pane.visible { display: block; }
+  .mobile-list, .mobile-chat { overflow: hidden; }
+  .mobile-list > .conversation-panel, .mobile-chat > .chat-panel { height: 100%; }
+}
+
+@media (max-height: 650px) and (min-width: 861px) {
+  .auth-content { padding-top: 50px; }
+}

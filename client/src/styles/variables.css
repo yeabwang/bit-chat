@@ -1,0 +1,21 @@
+:root {
+  --page: #f6f6f8;
+  --panel: #fff;
+  --input: #fff;
+  --text: #18181b;
+  --muted: #8d8d96;
+  --border: #e9e9ee;
+  --hover: #f4f0fb;
+  --bubble: #f1f1f4;
+}
+
+.app.dark {
+  --page: #141419;
+  --panel: #1c1c22;
+  --input: #23232a;
+  --text: #f4f4f6;
+  --muted: #9d9da8;
+  --border: #303039;
+  --hover: #28232f;
+  --bubble: #292930;
+}
