@@ -27,7 +27,27 @@ No request body, no query parameters.
       "createdAt": "2026-09-02T08:08:34.921Z",
       "updatedAt": "2026-09-02T08:08:34.921Z",
       "__v": 0,
-      "isOnline": true
+      "isOnline": false
+    },
+    {
+      "_id": "6a97d99ff2e2a731973f333d",
+      "name": "Tony",
+      "userName": "tony",
+      "avatar": "https://avatars.githubusercontent.com/u/173241359?v=4",
+      "createdAt": "2026-09-02T08:09:03.235Z",
+      "updatedAt": "2026-09-02T08:09:03.235Z",
+      "__v": 0,
+      "isOnline": false
+    },
+    {
+      "_id": "6a97d9bef2e2a731973f3340",
+      "name": "Vagif",
+      "userName": "vagif",
+      "avatar": "https://avatars.githubusercontent.com/u/79749801?v=4",
+      "createdAt": "2026-09-02T08:09:34.749Z",
+      "updatedAt": "2026-09-02T08:09:34.749Z",
+      "__v": 0,
+      "isOnline": false
     }
   ]
 }

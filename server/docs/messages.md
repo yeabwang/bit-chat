@@ -64,7 +64,21 @@ A whitespace-only `content` is rejected: it trims to the empty string and fails 
 ```json
 {
   "message": "Message sent",
-  "newMessage": { "...": "message object" }
+  "newMessage": {
+    "conversationId": "6a97db32a2b4a0d3c06fdd3e",
+    "sender": {
+      "_id": "6a96d943c9e433d4bf56f83c",
+      "name": "Yeabsira Tesfaye",
+      "userName": "yeabwang",
+      "avatar": "https://avatars.githubusercontent.com/u/122813658?s=400&u=adc7b4ccbf5a80ead19ab9251a0f9631f1109bec&v=4"
+    },
+    "content": "Meeting at 5",
+    "replyTo": null,
+    "_id": "6a9e7a26bad6b86feeee095b",
+    "createdAt": "2026-09-07T08:47:34.088Z",
+    "updatedAt": "2026-09-07T08:47:34.088Z",
+    "__v": 0
+  }
 }
 ```
 
@@ -92,9 +106,25 @@ Returns one page of history, newest messages last.
 ```json
 {
   "message": "Messages retrieved successfully",
-  "items": [{ "...": "message object" }],
-  "hasMore": true,
-  "nextCursor": "6a97e0a1f2e2a731973f3355"
+  "items": [
+    {
+      "_id": "6a9e7a26bad6b86feeee095b",
+      "conversationId": "6a97db32a2b4a0d3c06fdd3e",
+      "sender": {
+        "_id": "6a96d943c9e433d4bf56f83c",
+        "name": "Yeabsira Tesfaye",
+        "userName": "yeabwang",
+        "avatar": "https://avatars.githubusercontent.com/u/122813658?s=400&u=adc7b4ccbf5a80ead19ab9251a0f9631f1109bec&v=4"
+      },
+      "content": "Meeting at 5",
+      "replyTo": null,
+      "createdAt": "2026-09-07T08:47:34.088Z",
+      "updatedAt": "2026-09-07T08:47:34.088Z",
+      "__v": 0
+    }
+  ],
+  "hasMore": false,
+  "nextCursor": null
 }
 ```
 
