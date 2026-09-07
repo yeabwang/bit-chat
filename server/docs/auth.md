@@ -125,7 +125,7 @@ Same `userName` and `password` rules as `register`.
 
 ## POST /api/auth/logout
 
-No request body. Clears the `accessToken` cookie. Succeeds whether or not a session was present.
+No request body. Clears the `accessToken` cookie, and closes the socket connections belonging to that session. Succeeds whether or not a session was present.
 
 ## The response object
 

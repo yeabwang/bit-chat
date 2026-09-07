@@ -1,9 +1,12 @@
 import { Types } from "mongoose";
 import ConversationModel, { ConversationDocument } from "../models/conversation.model";
-import MessageModel from "../models/message.model";
 import UserModel from "../models/user.model";
 import { BadRequestException, NotFoundException } from "../utils/app-error";
-import { CreateConversationSchemaType } from "../validators/conversation.validator";
+import {
+  AddMembersSchemaType,
+  CreateConversationSchemaType,
+  RenameGroupSchemaType,
+} from "../validators/conversation.validator";
 
 const PARTICIPANT_FIELDS = "name userName avatar";
 
@@ -16,6 +19,22 @@ const assertUsersExist = async (ids: string[]) => {
 
 const populateConversation = (conversation: ConversationDocument) =>
   conversation.populate("participants", PARTICIPANT_FIELDS);
+
+const explainGroupFailure = async (
+  conversationId: string,
+  userId: Types.ObjectId,
+): Promise<never> => {
+  const conversation = await ConversationModel.findOne(
+    { _id: conversationId, participants: userId },
+    { isGroup: 1 },
+  );
+
+  if (!conversation)
+    throw new NotFoundException("Conversation not found or you are not a participant");
+  if (!conversation.isGroup)
+    throw new BadRequestException("This action is only available on group conversations");
+  throw new BadRequestException("The group has reached its member limit");
+};
 
 export const createConversationService = async (
   userId: Types.ObjectId,
@@ -37,7 +56,10 @@ export const createConversationService = async (
       createdBy: me,
     });
 
-    return { conversation: await populateConversation(conversation), created: true };
+    return {
+      conversation: await populateConversation(conversation),
+      created: true,
+    };
   }
 
   if (body.participantId === me)
@@ -45,8 +67,6 @@ export const createConversationService = async (
   await assertUsersExist([body.participantId]);
 
   const dmKey = dmKeyFor(me, body.participantId);
-
-  // unique index on dmKey is what stops two concurrent requests opening a second DM for the pair
   const result = await ConversationModel.findOneAndUpdate(
     { dmKey },
     {
@@ -83,6 +103,14 @@ export const getUserConversationsService = (userId: Types.ObjectId) =>
     })
     .sort({ lastActivityAt: -1 });
 
+export const getUserConversationIdsService = async (userId: string) => {
+  const conversations = await ConversationModel.find(
+    { participants: userId },
+    { _id: 1 },
+  ).lean();
+  return conversations.map(({ _id }) => String(_id));
+};
+
 export const getSingleConversationService = async (
   conversationId: string,
   userId: Types.ObjectId,
@@ -92,31 +120,69 @@ export const getSingleConversationService = async (
     participants: userId,
   }).populate("participants", PARTICIPANT_FIELDS);
 
-  // non-participant cannot tell the conversation exists
   if (!conversation)
     throw new NotFoundException("Conversation not found or you are not a participant");
 
-  const messages = await MessageModel.find({ conversationId })
-    .populate("sender", PARTICIPANT_FIELDS)
-    .populate({
-      path: "replyTo",
-      select: "content image sender",
-      populate: { path: "sender", select: PARTICIPANT_FIELDS },
-    })
-    .sort({ createdAt: 1 });
-
-  return { conversation, messages };
+  return conversation;
 };
 
-export const validateConversationParticipant = async (
-  conversationId: string,
+export const MAX_GROUP_MEMBERS = 100;
+
+export const addMembersService = async (
   userId: Types.ObjectId,
+  conversationId: string,
+  body: AddMembersSchemaType,
 ) => {
-  const conversation = await ConversationModel.findOne({
-    _id: conversationId,
-    participants: userId,
-  });
-  if (!conversation)
-    throw new NotFoundException("Conversation not found or you are not a participant");
-  return conversation;
+  const members = [...new Set(body.members)];
+  await assertUsersExist(members);
+
+  const conversation = await ConversationModel.findOneAndUpdate(
+    {
+      _id: conversationId,
+      participants: userId,
+      isGroup: true,
+      $expr: {
+        $lte: [{ $size: "$participants" }, MAX_GROUP_MEMBERS - members.length],
+      },
+    },
+    { $addToSet: { participants: { $each: members } } },
+    { new: true },
+  ).populate("participants", PARTICIPANT_FIELDS);
+
+  if (!conversation) await explainGroupFailure(conversationId, userId);
+
+  return conversation!;
+};
+
+export const leaveConversationService = async (
+  userId: Types.ObjectId,
+  conversationId: string,
+) => {
+  const conversation = await ConversationModel.findOneAndUpdate(
+    { _id: conversationId, participants: userId, isGroup: true },
+    { $pull: { participants: userId } },
+    { new: true },
+  ).populate("participants", PARTICIPANT_FIELDS);
+
+  // ponytail: a group whose last member leaves is left in place, unreachable by
+  // anyone. Add a sweep if orphans ever matter.
+  if (!conversation) await explainGroupFailure(conversationId, userId);
+
+  return conversation!;
+};
+
+export const renameGroupService = async (
+  userId: Types.ObjectId,
+  conversationId: string,
+  body: RenameGroupSchemaType,
+) => {
+  const conversation = await ConversationModel.findOneAndUpdate(
+    { _id: conversationId, participants: userId, isGroup: true },
+    { $set: { groupName: body.groupName } },
+    { new: true },
+  ).populate("participants", PARTICIPANT_FIELDS);
+
+  if (!conversation) await explainGroupFailure(conversationId, userId);
+
+  return conversation!;
 };

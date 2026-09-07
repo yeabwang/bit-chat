@@ -53,7 +53,7 @@ We’re making a text based, instant messaging and web based system where two or
 - End-to-end encryption.
 - Message search across conversations.
 - Federation, multi-tenancy, or mobile native clients.
-- Non-image file attachments
+- File and image attachments
 
 ## Success Criteria
 

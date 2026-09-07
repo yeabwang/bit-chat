@@ -2,7 +2,13 @@ import { Request, Response } from "express";
 import { asyncHandler } from "../middlewares/asyncHandler.middleware";
 import { loginSchema, registerSchema } from "../validators/auth.validator";
 import { loginService, registerService } from "../services/auth.service";
-import { clearJwtAuthCookie, setJwtAuthCookie } from "../utils/cookie";
+import {
+  clearJwtAuthCookie,
+  COOKIE_NAME,
+  setJwtAuthCookie,
+  verifyJwtAuthToken,
+} from "../utils/cookie";
+import { disconnectUser } from "../lib/socket";
 import { HTTPSTATUS } from "../config/http.config";
 
 export const registerController = asyncHandler(async (req: Request, res: Response) => {
@@ -29,7 +35,16 @@ export const loginController = asyncHandler(async (req: Request, res: Response) 
     });
 });
 
-export const logoutController = asyncHandler(async (_req: Request, res: Response) => {
+export const logoutController = asyncHandler(async (req: Request, res: Response) => {
+  const token = req.cookies?.[COOKIE_NAME];
+  if (token) {
+    try {
+      disconnectUser(verifyJwtAuthToken(token).userId);
+    } catch {
+      // an unreadable token has no sockets to close
+    }
+  }
+
   return clearJwtAuthCookie(res).status(HTTPSTATUS.OK).json({
     message: "Signed out",
   });

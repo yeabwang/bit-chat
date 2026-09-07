@@ -1,12 +1,20 @@
 // Minimal stand-ins to a chainable query, and a document you can await .populate() on.
 
-type Recorded = { populate: unknown[][]; sort: unknown[][]; select: unknown[][] };
+type Recorded = {
+  populate: unknown[][];
+  sort: unknown[][];
+  select: unknown[][];
+  limit: unknown[][];
+  lean: unknown[][];
+};
 
 export type QueryStub = {
   calls: Recorded;
   populate: (...args: unknown[]) => QueryStub;
   sort: (...args: unknown[]) => QueryStub;
   select: (...args: unknown[]) => QueryStub;
+  limit: (...args: unknown[]) => QueryStub;
+  lean: (...args: unknown[]) => QueryStub;
   then: (
     resolve: (value: unknown) => unknown,
     reject?: (reason: unknown) => unknown,
@@ -14,12 +22,14 @@ export type QueryStub = {
 };
 
 export const queryStub = (result: unknown): QueryStub => {
-  const calls: Recorded = { populate: [], sort: [], select: [] };
+  const calls: Recorded = { populate: [], sort: [], select: [], limit: [], lean: [] };
   const query: QueryStub = {
     calls,
     populate: (...args) => (calls.populate.push(args), query),
     sort: (...args) => (calls.sort.push(args), query),
     select: (...args) => (calls.select.push(args), query),
+    limit: (...args) => (calls.limit.push(args), query),
+    lean: (...args) => (calls.lean.push(args), query),
     then: (resolve, reject) => Promise.resolve(result).then(resolve, reject),
   };
   return query;

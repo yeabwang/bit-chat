@@ -3,7 +3,6 @@ import test, { mock } from "node:test";
 import assert from "node:assert/strict";
 import { Types } from "mongoose";
 import ConversationModel from "../src/models/conversation.model";
-import MessageModel from "../src/models/message.model";
 import UserModel from "../src/models/user.model";
 import {
   createConversationService,
@@ -225,35 +224,18 @@ test("the conversation list is filtered to the caller and ordered by activity", 
   assert.deepEqual(query.calls.sort[0][0], { lastActivityAt: -1 });
 });
 
-test("history is read by conversationId, oldest first", async (t) => {
-  t.after(() => mock.restoreAll());
-  mock.method(ConversationModel, "findOne", (() =>
-    queryStub(docStub({ _id: CONVERSATION_ID }))) as never);
-  const messageQuery = queryStub([]);
-  const find = mock.method(MessageModel, "find", (() => messageQuery) as never);
-
-  await getSingleConversationService(CONVERSATION_ID, ME);
-
-  // the field is conversationId; querying { chatId } silently matched nothing
-  assert.deepEqual(callArgs(find)[0], {
-    conversationId: CONVERSATION_ID,
-  });
-  assert.deepEqual(messageQuery.calls.sort[0][0], { createdAt: 1 });
-});
-
-test("a non participant gets a 404 and no history is read", async (t) => {
+test("a non participant gets a 404 from a conversation read", async (t) => {
   t.after(() => mock.restoreAll());
   const findOne = mock.method(ConversationModel, "findOne", (() =>
     queryStub(null)) as never);
-  const find = mock.method(MessageModel, "find", (() => queryStub([])) as never);
 
   await assert.rejects(
     getSingleConversationService(CONVERSATION_ID, ME),
     (error: { statusCode?: number }) => error.statusCode === 404,
   );
+  // membership is part of the lookup, not a check made afterwards
   assert.deepEqual(callArgs(findOne)[0], {
     _id: CONVERSATION_ID,
     participants: ME,
   });
-  assert.equal(find.mock.callCount(), 0);
 });
