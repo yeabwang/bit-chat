@@ -95,11 +95,11 @@ This endpoint is idempotent for a pair of users: calling it twice returns the sa
 }
 ```
 
-| Field          | Required | Rules                                                |
-| -------------- | -------- | ---------------------------------------------------- |
-| `isGroup`      | yes      | `true`                                               |
-| `groupName`    | yes      | trimmed, 1-60 characters                             |
-| `participants` | yes      | at least two object ids, **not counting the caller** |
+| Field          | Required | Rules                                               |
+| -------------- | -------- | --------------------------------------------------- |
+| `isGroup`      | yes      | `true`                                              |
+| `groupName`    | yes      | trimmed, 1-60 characters                            |
+| `participants` | yes      | at least two object ids,**not counting the caller** |
 
 The caller is added to `participants` automatically and always ends up first. Duplicate ids are collapsed, and the caller's own id is stripped if it was sent, so `[jade, jade, vagif, me]` becomes `[me, jade, vagif]`. The length check runs **after** that collapse, so `[jade, me]` is rejected because a two person group is a DM.
 
@@ -323,7 +323,50 @@ Renames a group. Any member may rename; there is no owner or admin role.
 | `401`  | No session                                    | `{ "message": "Not authenticated", ... }`                               |
 | `404`  | No such conversation,**or** not a participant | `{ "message": "Conversation not found or you are not a participant" }`  |
 
-Emits `conversation:updated` to the group.
+## The response object
+
+```json
+{
+  "message": "Group renamed",
+  "conversation": {
+    "_id": "6a97dcf5f2e2a731973f3353",
+    "participants": [
+      {
+        "_id": "6a96d943c9e433d4bf56f83c",
+        "name": "Yeabsira Tesfaye",
+        "userName": "yeabwang",
+        "avatar": "https://avatars.githubusercontent.com/u/122813658?s=400&u=adc7b4ccbf5a80ead19ab9251a0f9631f1109bec&v=4"
+      },
+      {
+        "_id": "6a97d982f2e2a731973f333a",
+        "name": "Jade",
+        "userName": "jade",
+        "avatar": "https://avatars.githubusercontent.com/u/218497123?v=4"
+      },
+      {
+        "_id": "6a97d99ff2e2a731973f333d",
+        "name": "Tony",
+        "userName": "tony",
+        "avatar": "https://avatars.githubusercontent.com/u/173241359?v=4"
+      },
+      {
+        "_id": "6a97d9bef2e2a731973f3340",
+        "name": "Vagif",
+        "userName": "vagif",
+        "avatar": "https://avatars.githubusercontent.com/u/79749801?v=4"
+      }
+    ],
+    "isGroup": true,
+    "groupName": "Coding group v2",
+    "createdBy": "6a96d943c9e433d4bf56f83c",
+    "lastMessage": null,
+    "lastActivityAt": "2026-09-02T08:23:17.430Z",
+    "createdAt": "2026-09-02T08:23:17.431Z",
+    "updatedAt": "2026-09-07T08:38:33.013Z",
+    "__v": 0
+  }
+}
+```
 
 ---
 
@@ -353,6 +396,51 @@ Ids are de-duplicated before the write, and the write is `$addToSet`, so adding 
 
 Existing members get `conversation:updated`; the new members are then put into the conversation room and get `conversation:new`. Their live sockets join in the same request, so they start receiving the group's messages without reconnecting.
 
+## The response object
+
+```json
+{
+  "message": "Members added",
+  "conversation": {
+    "_id": "6a97dcf5f2e2a731973f3353",
+    "participants": [
+      {
+        "_id": "6a96d943c9e433d4bf56f83c",
+        "name": "Yeabsira Tesfaye",
+        "userName": "yeabwang",
+        "avatar": "https://avatars.githubusercontent.com/u/122813658?s=400&u=adc7b4ccbf5a80ead19ab9251a0f9631f1109bec&v=4"
+      },
+      {
+        "_id": "6a97d982f2e2a731973f333a",
+        "name": "Jade",
+        "userName": "jade",
+        "avatar": "https://avatars.githubusercontent.com/u/218497123?v=4"
+      },
+      {
+        "_id": "6a97d99ff2e2a731973f333d",
+        "name": "Tony",
+        "userName": "tony",
+        "avatar": "https://avatars.githubusercontent.com/u/173241359?v=4"
+      },
+      {
+        "_id": "6a97d9bef2e2a731973f3340",
+        "name": "Vagif",
+        "userName": "vagif",
+        "avatar": "https://avatars.githubusercontent.com/u/79749801?v=4"
+      }
+    ],
+    "isGroup": true,
+    "groupName": "Coding group v2",
+    "createdBy": "6a96d943c9e433d4bf56f83c",
+    "lastMessage": null,
+    "lastActivityAt": "2026-09-02T08:23:17.430Z",
+    "createdAt": "2026-09-02T08:23:17.431Z",
+    "updatedAt": "2026-09-07T08:41:32.146Z",
+    "__v": 0
+  }
+}
+```
+
 ---
 
 ## DELETE /api/conversations/:id/members/me
@@ -369,6 +457,14 @@ Leaves a group. There is no body.
 The leaver is pulled out of `participants`, which is also what ends their access to the history - this endpoint, `GET /api/conversations/:id` and the messages endpoint all filter on membership, so a former member gets a `404`.
 
 Their sockets are taken out of the conversation room **before** any further event is emitted, so the leaver stops receiving the group's messages with no reconnect and no refresh.
+
+## The response object
+
+```json
+{
+  "message": "Left the conversation"
+}
+```
 
 ---
 
