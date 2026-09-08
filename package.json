@@ -1,5 +1,5 @@
 {
-  "name": "named-chat",
+  "name": "bit-chat",
   "private": true,
   "scripts": {
     "prepare": "husky"

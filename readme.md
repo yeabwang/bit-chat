@@ -1,4 +1,4 @@
-# Named-chat
+# Bit-chat
 
 We’re making a text based, instant messaging and web based system where two or more users can have one-to-one or group conversation. Users can see the online/offline status of other users and participate in multiple conversations.
 
@@ -68,3 +68,35 @@ We’re making a text based, instant messaging and web based system where two or
   service; concurrency tests fail if their fix is reverted.
 - The manual test matrix is executed and recorded with results and
   screenshots, not just designed.
+
+## Repository Layout
+
+```text
+bit-chat/
+├── client/   React + Vite UI prototype (mock data, no backend calls yet)
+└── server/   Express + MongoDB + socket.io API and WebSocket fanout
+```
+
+## Running
+
+### Client only (UI prototype, no server needed)
+
+```bash
+cd client
+npm install
+npm run dev
+```
+
+Vite prints a local URL (default `http://localhost:5173`). The prototype ships
+its own mock data, so no API, database, or `.env` is required. Sign-in accepts
+any input and drops straight into the inbox.
+
+### Server
+
+```bash
+cd server
+npm install
+cp .env_example .env   # set MONGODB_URI, JWT_SECRET, CLIENT_ORIGIN
+npm run dev             # http://localhost:8000
+npm test
+```

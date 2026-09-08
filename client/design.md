@@ -1,4 +1,4 @@
-# Inbox UI Design Notes
+# Bit-chat UI Design Notes
 
 This document describes the current React + Vite frontend prototype based on the supplied Figma draft. It records the visual hierarchy and responsive decisions rather than describing a completed messaging backend.
 
