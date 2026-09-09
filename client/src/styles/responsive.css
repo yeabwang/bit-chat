@@ -11,7 +11,3 @@
   .mobile-list, .mobile-chat { overflow: hidden; }
   .mobile-list > .conversation-panel, .mobile-chat > .chat-panel { height: 100%; }
 }
-
-@media (max-height: 650px) and (min-width: 861px) {
-  .auth-content { padding-top: 50px; }
-}

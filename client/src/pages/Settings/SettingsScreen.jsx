@@ -1,25 +1,34 @@
-import React from "react";
-import { settingsRows } from "../../data/mockData";
+import Avatar from "../../components/Avatar/Avatar";
 import "./settings.css";
 
-export default function SettingsScreen() {
-  return <section className="center-screen">
-    <div className="settings-card">
-      <h1>Settings</h1>
-      {settingsRows.map((row, i) => (
-        <div className="settings-row" key={row}>
-          <span>{row}</span>
-          {i === 0 || i === 2 ? (
-            <button className="settings-toggle">
-              <span />
-            </button>
-          ) : i === 1 ? (
-            <span className="setting-value">@username</span>
-          ) : (
-            <span className="setting-arrow">›</span>
-          )}
+// GET /api/auth/status to read it, POST /api/auth/logout to sign out.
+export default function SettingsScreen({ user, onLogout }) {
+  return (
+    <section className="center-screen">
+      <div className="settings-card">
+        <h1>Settings</h1>
+
+        <div className="profile-row">
+          <Avatar src={user.avatar} size={64} />
+          <div className="profile-copy">
+            <strong>{user.name}</strong>
+            <span>@{user.userName}</span>
+          </div>
         </div>
-      ))}
-    </div>
-  </section>;
+
+        <dl className="settings-list">
+          <div className="settings-row">
+            <dt>Display name</dt>
+            <dd>{user.name}</dd>
+          </div>
+          <div className="settings-row">
+            <dt>Username</dt>
+            <dd>@{user.userName}</dd>
+          </div>
+        </dl>
+
+        <button className="logout-button" onClick={onLogout}>Log out</button>
+      </div>
+    </section>
+  );
 }

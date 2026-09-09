@@ -1,29 +1,131 @@
-import React, { useMemo } from "react";
+import { useMemo } from "react";
 import { ASSETS } from "../../data/assets";
-import { contacts } from "../../data/mockData";
+import { users } from "../../data/mockData";
 import Avatar from "../../components/Avatar/Avatar";
+import AvatarStack from "../../components/Avatar/AvatarStack";
 import Icon from "../../components/Icon/Icon";
+import {
+  titleOf,
+  avatarsOf,
+  previewOf,
+  isPeerOnline,
+  memberCount,
+  timeOf,
+} from "../../data/conversation";
 import "./inbox.css";
 
-export default function ConversationList({ selected, setSelected, query, setQuery, onBack }) {
-  const filtered = useMemo(() => contacts.filter(([name, preview]) => `${name} ${preview}`.toLowerCase().includes(query.toLowerCase())), [query]);
+export default function ConversationList({
+  conversations,
+  me,
+  onlineIds,
+  activeId,
+  onSelect,
+  query,
+  setQuery,
+  onNewMessage,
+}) {
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return conversations;
+    return conversations.filter((c) =>
+      `${titleOf(c, me._id)} ${previewOf(c, me._id)}`.toLowerCase().includes(needle),
+    );
+  }, [conversations, query, me._id]);
+
+  const unread = conversations.reduce((total, c) => total + (c.unreadCount ?? 0), 0);
+  const online = users.filter((u) => onlineIds.has(u._id));
+
   return (
     <section className="conversation-panel">
       <header className="inbox-header">
-        <div><div className="title-row"><h2>Inbox</h2><Icon src={ASSETS.edit} /></div><div className="muted tiny">125 message <span className="dot-sep" /> 5 unread</div></div>
-      </header>
-      <div className="search-box"><Icon src={ASSETS.search} /><input placeholder="Search..." value={query} onChange={(e) => setQuery(e.target.value)} /></div>
-      <div className="online-header"><strong>Online Now</strong><button>All</button></div>
-      <div className="online-row">{contacts.slice(0, 4).map((c, i) => <Avatar key={i} src={c[3]} size={40} online />)}</div>
-      <div className="conversation-list">
-        {filtered.map(([name, preview, time, avatar, online, unread], i) => (
-          <button key={`${name}-${i}`} className={`conversation ${selected === i ? "selected" : ""}`} onClick={() => { setSelected(i); onBack?.(); }}>
-            <Avatar src={avatar} size={40} online={online} />
-            <span className="conversation-copy"><span className="conversation-name">{name}</span><span className={online ? "typing" : "conversation-preview"}>{preview}</span></span>
-            <span className="conversation-meta"><span>{time}</span>{unread > 0 ? <b>{unread}</b> : <Icon src={ASSETS.check} size={16} />}</span>
+        <div className="title-row">
+          <h2>Inbox</h2>
+          <button className="icon-button" onClick={onNewMessage} title="New message" aria-label="New message">
+            <Icon src={ASSETS.edit} size={18} />
           </button>
-        ))}
+        </div>
+        <p className="inbox-summary">
+          {conversations.length} conversation{conversations.length === 1 ? "" : "s"}
+          {unread > 0 && (
+            <>
+              <span className="dot-sep" aria-hidden="true" />
+              {unread} unread
+            </>
+          )}
+        </p>
+      </header>
+
+      <div className="search-box">
+        <Icon src={ASSETS.search} size={16} />
+        <input
+          type="search"
+          placeholder="Search conversations"
+          aria-label="Search conversations"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
       </div>
+
+      {online.length > 0 && (
+        <div className="online-strip">
+          <h3>Online now</h3>
+          <ul className="online-row">
+            {online.slice(0, 8).map((user) => (
+              <li key={user._id} title={`${user.name} (@${user.userName})`}>
+                <Avatar src={user.avatar} size={36} online />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <ul className="conversation-list">
+        {filtered.map((conversation) => {
+          const group = conversation.isGroup;
+          const people = avatarsOf(conversation, me._id);
+          const count = conversation.unreadCount ?? 0;
+          return (
+            <li key={conversation._id}>
+              <button
+                className={`conversation ${activeId === conversation._id ? "selected" : ""}`}
+                onClick={() => onSelect(conversation._id)}
+                aria-current={activeId === conversation._id ? "true" : undefined}
+              >
+                {group ? (
+                  <AvatarStack people={people} size={40} />
+                ) : (
+                  <Avatar
+                    src={people[0]?.avatar}
+                    size={40}
+                    online={isPeerOnline(conversation, me._id, onlineIds)}
+                  />
+                )}
+
+                <span className="conversation-copy">
+                  <span className="conversation-name">
+                    {titleOf(conversation, me._id)}
+                    {group && (
+                      <span className="member-chip">{memberCount(conversation)}</span>
+                    )}
+                  </span>
+                  <span className="conversation-preview">{previewOf(conversation, me._id)}</span>
+                </span>
+
+                <span className="conversation-meta">
+                  <time dateTime={conversation.lastActivityAt}>
+                    {timeOf(conversation.lastActivityAt)}
+                  </time>
+                  {count > 0 && <b aria-label={`${count} unread`}>{count}</b>}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+
+        {filtered.length === 0 && (
+          <li className="empty-note">No conversations match “{query}”.</li>
+        )}
+      </ul>
     </section>
   );
 }

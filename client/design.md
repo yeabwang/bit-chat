@@ -1,8 +1,7 @@
 # Bit-chat UI Design Notes
 
-This document describes the current React + Vite frontend prototype based on the supplied Figma draft. It records the visual hierarchy and responsive decisions rather than describing a completed messaging backend.
-
-The project root is the repository's `client/` folder. The current design remains frontend-only and is implemented under `src/`.
+Frontend-only React + Vite prototype built from the Figma draft. Records layout and data-shape decisions, not a
+finished backend. Project root is the repository's `client/` folder.
 
 ## Information Architecture
 
@@ -13,28 +12,29 @@ client/
 ├── package-lock.json
 ├── readme.md
 ├── design.md
+├── tests/                    
+│   ├── authValidation.test.js
+│   └── conversation.test.js
 └── src/
-    ├── App.jsx
+    ├── App.jsx                 current screen + UI state
     ├── main.jsx
-    ├── components/
+    ├── assets/
+    │   ├── logo.svg            traced crest
+    │   └── logo-wordmark.svg   wordmark, currentColor silhouette
+    ├── components/             reusable primitives
     │   ├── Avatar/
-    │   ├── Button/
-    │   ├── ConversationItem/
     │   ├── Icon/
     │   ├── Image/
-    │   ├── Input/
-    │   ├── MessageBubble/
     │   ├── Modal/
-    │   ├── SearchBar/
     │   ├── Sidebar/
     │   └── common.css
-    ├── pages/
+    ├── pages/                  screen composition + page styles
     │   ├── Friends/
     │   ├── Inbox/
     │   ├── Login/
     │   ├── Settings/
     │   └── Signup/
-    ├── layouts/AppLayout/
+    ├── layouts/AppLayout/      authenticated shell, sidebar placement
     ├── data/
     └── styles/
         ├── global.css
@@ -42,31 +42,100 @@ client/
         └── variables.css
 ```
 
-Reusable controls and visual primitives are isolated in `components/`. The `pages/` directory owns screen-level composition and page-specific styles. `AppLayout` provides the authenticated shell and sidebar placement, while `App.jsx` controls the current screen and UI state.
-
 ## Visual Hierarchy
 
-- The sidebar provides primary navigation, theme switching, help, settings, and logout actions.
-- The conversation list is a scanning surface: search, online contacts, previews, timestamps, unread counts, and selected state appear in that order.
-- The chat panel gives the active conversation the largest area, with identity and actions in the header, messages in the center, and the composer anchored at the bottom.
-- Friend requests and settings use centered cards in the content area so they remain readable at wide viewport sizes.
-- Authentication uses a focused card over a full-screen image background and keeps the form width constrained on smaller screens.
-- Modal dialogs sit above the app with a dimmed backdrop and preserve the current screen underneath.
+- **Sidebar** — brand lockup, then Inbox and Friend requests; Settings and Log out pinned to the bottom. Active row
+  gets a fill *and* a left rail (alpha fill alone is weak on a saturated ground).
+- **Conversation list** — search, online contacts, previews, timestamps, unread counts, selected state, in that
+  order. New conversation is the pencil beside the "Inbox" heading, not a separate button.
+- **Chat panel** — largest area. Identity and actions in the header, messages centre, composer anchored bottom.
+- **Friends / Settings** — centred cards, readable at wide viewports.
+- **Auth** — one centred card over a brand gradient of two opposing radial glows (a linear ramp between the theme
+  colours passes through mud brown). Card order: logo, heading, lead, fields, primary action, mode switch. Green
+  carries the action, red stays chrome. Under 480px the card becomes the page.
+- **Modals** — dimmed backdrop, screen underneath preserved.
+
+### Colour
+
+All colour lives in `styles/variables.css`; no other source file holds a literal. Roles are not interchangeable:
+
+| Token | Role |
+| --- | --- |
+| `--sidebar-bg` | brand anchor |
+| `--accent` | interactive: buttons, own bubble, unread badge |
+| `--online` | presence only, never an action |
+| `--accent-tint` / `--accent-tint-strong` | hover / selected rows |
+| `--danger` | errors — a different red from `--brand-red`, so an error never reads as chrome |
+
+Icon assets are flat Figma exports with a baked fill. `Icon` masks them over `currentColor`, so a glyph takes its
+colour from context instead of shipping recoloured copies.
+
+### Direct messages and groups
+
+One server object covers both, flagged by `isGroup`. A DM has `groupName: null`, exactly two participants, and `400`
+on rename / add-member / leave. Every branch is derived in `data/conversation.js`, keeping components presentational.
+
+| | DM | Group |
+| --- | --- | --- |
+| Title | other participant's `name` | `groupName` |
+| Avatar | other participant + presence dot | two-up stack, no dot (presence is per person) |
+| List preview | the message | the message, sender-prefixed |
+| Header detail | `@userName` + online state | member count, how many online |
+| Header actions | none | Add members, Rename, Leave |
+| Messages | no sender heading (header names them) | sender name + avatar per run |
+
+Messages from one sender within five minutes collapse into a run — heading and avatar appear once per run.
 
 ## Responsive Behavior
 
-- Desktop: sidebar, conversation list, and chat panel appear as three columns.
-- Medium screens: sidebar and conversation list contract while the chat panel retains the remaining width.
-- Small screens: the app changes to a single-column layout and switches between the conversation list and active chat view instead of squeezing three columns together.
-- Friends and settings cards span the available content area and remain horizontally centered.
-- Authentication cards use fluid sizing and become nearly full-width on phones.
-- Content panels use scrolling within their available height so the composer and navigation remain usable.
+| Width | Layout |
+| --- | --- |
+| Desktop | three columns: sidebar, conversation list, chat panel |
+| Medium | sidebar and list contract, chat panel keeps the remainder |
+| Small | single column, toggling between list and active chat |
+
+Friends/settings cards span the content area and stay centred. Auth cards are fluid, near full-width on phones.
+Content panels scroll inside their own height so the composer and nav stay reachable.
 
 ## State And Data
 
-The prototype uses React state for authentication mode, selected conversation, search text, theme, modal visibility, and mobile view. `src/data/mockData.js` supplies contacts, messages, and settings rows. `src/data/assets.js` supplies the visual assets used by the prototype.
+React state holds auth mode, conversation list, active conversation, search text, modal visibility, mobile view. No
+persistence, HTTP client, WebSocket transport, or real presence yet.
 
-There is currently no persistence, authentication service, HTTP API, WebSocket transport, or real-time presence system. Those integrations should be added behind the existing page and component boundaries rather than directly inside presentational primitives.
+`data/mockData.js` matches the API responses it stands in for:
+
+| Mock export | Endpoint |
+| --- | --- |
+| `users` | `GET /api/users` |
+| `conversations` | `GET /api/conversations`, `lastActivityAt` descending |
+| `messagesByConversation` | `GET /api/conversations/:id/messages` |
+
+Wiring the server means swapping those imports for fetch calls — components consume the same fields either way.
+`data/conversation.js` holds the DM-vs-group rules, covered by `tests/conversation.test.js` (`npm test`).
+
+Auth posts the server's own field names — `{ name, userName, password }` to register, `{ userName, password }` to log
+in. `pages/Signup/authValidation.js` mirrors the zod schema, so `400 { errors: [{ field, message }] }` maps onto the
+form with no translation layer.
+
+Invariants already shaped for the socket protocol:
+
+- opening a thread clears its unread count
+- a rename must not reorder the list (`conversation:updated` leaves the row in place)
+- leaving drops the conversation
+- a sent message is appended optimistically, reconciled by `_id` on `message:new`
+
+### Friend requests
+
+No endpoints behind this screen yet. Built against this shape so the server has a target:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/friend-requests` | caller's incoming and outgoing requests |
+| `POST` | `/api/friend-requests` | send one, by `userId` |
+| `PATCH` | `/api/friend-requests/:id` | accept or decline an incoming request |
+| `DELETE` | `/api/friend-requests/:id` | withdraw one you sent |
+
+Until then it runs on `friendRequests` in `mockData.js`; accept/decline only updates local state.
 
 ## Run
 
@@ -75,5 +144,4 @@ npm install
 npm run dev
 ```
 
-Use `npm run build` to verify the production bundle before integrating future data services.
-
+`npm run build` verifies the production bundle.

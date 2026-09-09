@@ -1,31 +1,61 @@
-
-import React from "react";
 import { ASSETS } from "../../data/assets";
+import wordmark from "../../assets/logo-wordmark.svg";
 import Icon from "../Icon/Icon";
 import "./sidebar.css";
 
 const items = [
-  { id: "inbox", label: "Inbox", icon: ASSETS.messages, count: 14 },
-  { id: "friends", label: "Friend requests", icon: ASSETS.notification, count: 21 }
+  { id: "inbox", label: "Inbox", icon: ASSETS.messages },
+  { id: "friends", label: "Friend requests", icon: ASSETS.notification },
 ];
 
-export default function Sidebar({ screen, setScreen, onNewMessage, dark, setDark, onMobileClose }) {
-  const navigate = (next) => { setScreen(next); onMobileClose?.(); };
+export default function Sidebar({ screen, setScreen, counts = {}, onMobileClose, onLogout }) {
+  const navigate = (next) => {
+    setScreen(next);
+    onMobileClose?.();
+  };
 
   return (
     <aside className="sidebar">
-      <button className="new-message" onClick={onNewMessage}><Icon src={ASSETS.add} size={16} /><span>New Message</span></button>
-      {items.map((item) => (
-        <button key={item.id} className={`side-item ${screen === item.id ? "active" : ""}`} onClick={() => navigate(item.id)}>
-          <Icon src={item.icon} /><span>{item.label}</span><b>{item.count}</b>
-        </button>
-      ))}
+      <div className="sidebar-brand">
+        <img className="sidebar-wordmark" src={wordmark} alt="Beijing Institute of Technology" />
+      </div>
+
+      <nav className="sidebar-nav" aria-label="Main">
+        {items.map((item) => {
+          const active = screen === item.id;
+          const count = counts[item.id] ?? 0;
+          return (
+            <button
+              key={item.id}
+              className={`side-item ${active ? "active" : ""}`}
+              onClick={() => navigate(item.id)}
+              aria-current={active ? "page" : undefined}
+            >
+              <Icon src={item.icon} />
+              <span className="side-label">{item.label}</span>
+              {count > 0 && (
+                <b aria-label={`${count} unread`}>{count > 99 ? "99+" : count}</b>
+              )}
+            </button>
+          );
+        })}
+      </nav>
+
       <div className="sidebar-spacer" />
       <div className="sidebar-divider" />
-      <button className="side-item" onClick={() => setDark(!dark)}><span className={`toggle ${dark ? "on" : ""}`}><span /></span><span>Dark</span></button>
-      <button className="side-item" onClick={() => alert("Help is UI-only in this prototype.")}><Icon src={ASSETS.help} /><span>Help</span></button>
-      <button className="side-item" onClick={() => navigate("settings")}><Icon src={ASSETS.settings} /><span>Settings</span></button>
-      <button className="side-item" onClick={() => window.location.reload()}><Icon src={ASSETS.logout} /><span>Log out</span></button>
+
+      <button
+        className={`side-item ${screen === "settings" ? "active" : ""}`}
+        onClick={() => navigate("settings")}
+        aria-current={screen === "settings" ? "page" : undefined}
+      >
+        <Icon src={ASSETS.settings} />
+        <span className="side-label">Settings</span>
+      </button>
+      <button className="side-item" onClick={onLogout}>
+        <Icon src={ASSETS.logout} />
+        <span className="side-label">Log out</span>
+      </button>
     </aside>
   );
 }
