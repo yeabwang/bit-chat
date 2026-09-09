@@ -1,4 +1,3 @@
-import React from "react";
 import AuthScreen from "../Signup/AuthScreen";
 
 export default function Login(props) {

@@ -1,32 +1,37 @@
-.settings-row { 
-    min-height: 58px; 
-    border-top: 1px solid var(--border);
-    display: flex; align-items: center; 
-    justify-content: space-between;
-    gap: 16px; color: var(--text); 
-    font: 400 13px Poppins, sans-serif;
+.settings-list { margin: 0; padding: 0; }
+
+.profile-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 4px 0 24px;
 }
-.setting-value { 
-    color: var(--muted); 
+.profile-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.profile-copy strong { color: var(--text); font: 600 16px Poppins, sans-serif; }
+.profile-copy span { color: var(--muted); font: 400 13px Poppins, sans-serif; }
+
+.settings-row {
+  min-height: 56px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
-.setting-arrow { 
-    color: var(--muted); 
-    font-size: 24px; 
+.settings-row dt { color: var(--text-secondary); font: 400 13px Poppins, sans-serif; }
+.settings-row dd { margin: 0; color: var(--text); font: 500 13px Poppins, sans-serif; }
+
+.logout-button {
+  margin-top: 28px;
+  height: 44px;
+  padding: 0 20px;
+  border: 1px solid var(--danger);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--danger);
+  font: 500 13px Poppins, sans-serif;
+  cursor: pointer;
+  transition: background 0.15s;
 }
-.settings-toggle { 
-    width: 38px; 
-    height: 22px; 
-    padding: 2px; 
-    border: 0; 
-    border-radius: 20px; 
-    background: #8b57df; 
-    display: flex; 
-    justify-content: flex-end; 
-    cursor: pointer; 
-}
-.settings-toggle span { 
-    width: 18px; 
-    height: 18px; 
-    border-radius: 50%; 
-    background: white; 
-}
+.logout-button:hover { background: var(--danger-tint); }
+.logout-button:focus-visible { outline: 2px solid var(--danger); outline-offset: 2px; }
