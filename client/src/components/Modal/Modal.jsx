@@ -1,23 +1,34 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { users } from "../../data/mockData";
 import Avatar from "../Avatar/Avatar";
-import { titleOf } from "../../data/conversation";
+import { titleOf, newConversationPayload } from "../../data/conversation";
 import "./modal.css";
 
 /**
  * "new"     -> POST /api/conversations
  * "members" -> POST /api/conversations/:id/members
  */
-export default function Modal({ type, conversation, me, onlineIds, close }) {
+export default function Modal({
+  type,
+  conversation,
+  users = [],
+  me,
+  onlineIds,
+  onCreate,
+  close,
+}) {
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState([]);
   const [groupName, setGroupName] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     setQuery("");
     setPicked([]);
     setGroupName("");
+    setPending(false);
+    setError(null);
   }, [type]);
 
   useEffect(() => {
@@ -45,6 +56,21 @@ export default function Modal({ type, conversation, me, onlineIds, close }) {
       : picked.length === 1 || (isGroup && groupName.trim().length > 0);
 
   const heading = type === "members" ? `Add members to ${titleOf(conversation, me?._id)}` : "New message";
+
+  // the discriminated union the server validates: a single pick is a DM, two or more a group
+  const submit = async () => {
+    if (!canSubmit || pending) return;
+    if (type !== "new") return close();
+    setPending(true);
+    setError(null);
+    try {
+      await onCreate(newConversationPayload(picked, groupName));
+      close();
+    } catch (failure) {
+      setError(failure?.body?.message ?? failure?.message ?? "Could not start the chat");
+      setPending(false);
+    }
+  };
 
   return createPortal(
     <div className="modal-backdrop" onClick={close}>
@@ -95,13 +121,14 @@ export default function Modal({ type, conversation, me, onlineIds, close }) {
         </ul>
 
         <footer className="modal-foot">
-          <span className="modal-hint">
-            {type === "new" && picked.length === 1 && "Opens a direct message"}
-            {type === "new" && isGroup && `Group of ${picked.length + 1}`}
-            {type === "new" && picked.length === 0 && "Pick one person for a DM, or two or more for a group"}
-            {type === "members" && `${picked.length} selected`}
+          <span className="modal-hint" role={error ? "alert" : undefined}>
+            {error}
+            {!error && type === "new" && picked.length === 1 && "Opens a direct message"}
+            {!error && type === "new" && isGroup && `Group of ${picked.length + 1}`}
+            {!error && type === "new" && picked.length === 0 && "Pick one person for a DM, or two or more for a group"}
+            {!error && type === "members" && `${picked.length} selected`}
           </span>
-          <button className="modal-primary" disabled={!canSubmit} onClick={close}>
+          <button className="modal-primary" disabled={!canSubmit || pending} onClick={submit}>
             {type === "members" ? "Add" : isGroup ? "Create group" : "Start chat"}
           </button>
         </footer>

@@ -1,11 +1,10 @@
-import { ASSETS } from "../../data/assets";
 import wordmark from "../../assets/logo-wordmark.svg";
 import Icon from "../Icon/Icon";
 import "./sidebar.css";
 
 const items = [
-  { id: "inbox", label: "Inbox", icon: ASSETS.messages },
-  { id: "friends", label: "Friend requests", icon: ASSETS.notification },
+  { id: "inbox", label: "Inbox", icon: "messages" },
+  { id: "friends", label: "Friend requests", icon: "notification" },
 ];
 
 export default function Sidebar({ screen, setScreen, counts = {}, onMobileClose, onLogout }) {
@@ -31,7 +30,7 @@ export default function Sidebar({ screen, setScreen, counts = {}, onMobileClose,
               onClick={() => navigate(item.id)}
               aria-current={active ? "page" : undefined}
             >
-              <Icon src={item.icon} />
+              <Icon name={item.icon} />
               <span className="side-label">{item.label}</span>
               {count > 0 && (
                 <b aria-label={`${count} unread`}>{count > 99 ? "99+" : count}</b>
@@ -49,11 +48,11 @@ export default function Sidebar({ screen, setScreen, counts = {}, onMobileClose,
         onClick={() => navigate("settings")}
         aria-current={screen === "settings" ? "page" : undefined}
       >
-        <Icon src={ASSETS.settings} />
+        <Icon name="settings" />
         <span className="side-label">Settings</span>
       </button>
       <button className="side-item" onClick={onLogout}>
-        <Icon src={ASSETS.logout} />
+        <Icon name="logout" />
         <span className="side-label">Log out</span>
       </button>
     </aside>

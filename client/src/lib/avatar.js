@@ -9,3 +9,7 @@ export const avatarUrl = (seed) =>
 /** Stored avatar, or a generated one for accounts that have none. */
 export const avatarFor = (user) =>
   user?.avatar ?? avatarUrl(user?.userName ?? user?._id ?? "anonymous");
+
+/** Fill in a generated avatar so components can render `user.avatar` directly. */
+export const withAvatar = (user) =>
+  user && !user.avatar ? { ...user, avatar: avatarFor(user) } : user;

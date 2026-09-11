@@ -85,3 +85,44 @@ export function startsRun(message, previous) {
   const gap = new Date(message.createdAt) - new Date(previous.createdAt);
   return !(gap >= 0 && gap < RUN_WINDOW_MS);
 }
+
+/**
+ * The POST /api/conversations body for a set of picked user ids. One pick is a
+ * DM; two or more is a group, which the server requires a name for. The server
+ * validates a discriminated union on isGroup, so the wrong branch is a 400.
+ */
+export function newConversationPayload(picked, groupName) {
+  return picked.length === 1
+    ? { isGroup: false, participantId: picked[0] }
+    : { isGroup: true, groupName: (groupName ?? "").trim(), participants: picked };
+}
+
+/** A thread before its first page lands. */
+export const EMPTY_THREAD = { items: [], hasMore: false, nextCursor: null, loading: false };
+
+/**
+ * Put a message into a thread. `replaceId` swaps an optimistic copy for the
+ * server's; without it the message is appended. Either way an id already in the
+ * thread is overwritten in place, so a socket echo of our own send is not a
+ * duplicate.
+ */
+export function putMessage(thread = EMPTY_THREAD, message, replaceId = null) {
+  const at = thread.items.findIndex((m) => m._id === replaceId || m._id === message._id);
+  const items =
+    at === -1
+      ? [...thread.items, message]
+      : thread.items.map((m, index) => (index === at ? message : m));
+  return { ...thread, items };
+}
+
+/** Prepend an older page. Its items are already oldest-first. */
+export function mergeOlderPage(thread = EMPTY_THREAD, page) {
+  const known = new Set(thread.items.map((m) => m._id));
+  return {
+    ...thread,
+    items: [...page.items.filter((m) => !known.has(m._id)), ...thread.items],
+    hasMore: page.hasMore,
+    nextCursor: page.nextCursor,
+    loading: false,
+  };
+}

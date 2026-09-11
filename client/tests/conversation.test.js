@@ -9,6 +9,10 @@ import {
   canManage,
   byActivity,
   startsRun,
+  newConversationPayload,
+  putMessage,
+  mergeOlderPage,
+  EMPTY_THREAD,
 } from "../src/data/conversation.js";
 
 const me = { _id: "me", name: "Yeabsira Tesfaye", userName: "yeabwang" };
@@ -82,4 +86,40 @@ test("consecutive messages by one sender collapse into a run", () => {
   assert.equal(startsRun(at("2026-09-05T10:01:00.000Z", tony), first), true);
   // a long pause breaks the run even for the same sender
   assert.equal(startsRun(at("2026-09-05T10:30:00.000Z", jade), first), true);
+});
+
+test("a single pick is a DM payload, two or more a named group", () => {
+  assert.deepEqual(newConversationPayload(["a1"], "ignored"), {
+    isGroup: false,
+    participantId: "a1",
+  });
+  assert.deepEqual(newConversationPayload(["a1", "b2"], "  Study group "), {
+    isGroup: true,
+    groupName: "Study group",
+    participants: ["a1", "b2"],
+  });
+});
+
+test("the server's copy replaces the optimistic one instead of doubling it", () => {
+  const local = { _id: "local-1", content: "hi" };
+  const saved = { _id: "abc123", content: "hi" };
+
+  const pending = putMessage(EMPTY_THREAD, local);
+  assert.deepEqual(pending.items, [local]);
+
+  const settled = putMessage(pending, saved, "local-1");
+  assert.deepEqual(settled.items, [saved]);
+
+  // a socket echo of a message already in the thread is not a second copy
+  assert.deepEqual(putMessage(settled, saved).items, [saved]);
+});
+
+test("an older page prepends without repeating what is already loaded", () => {
+  const thread = { ...EMPTY_THREAD, items: [{ _id: "m3" }], hasMore: true, nextCursor: "m3" };
+  const page = { items: [{ _id: "m1" }, { _id: "m2" }, { _id: "m3" }], hasMore: false, nextCursor: null };
+
+  const merged = mergeOlderPage(thread, page);
+  assert.deepEqual(merged.items.map((m) => m._id), ["m1", "m2", "m3"]);
+  assert.equal(merged.hasMore, false);
+  assert.equal(merged.nextCursor, null);
 });

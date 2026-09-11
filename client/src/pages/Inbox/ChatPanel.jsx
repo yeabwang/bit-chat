@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Avatar from "../../components/Avatar/Avatar";
 import AvatarStack from "../../components/Avatar/AvatarStack";
 import {
@@ -16,12 +16,16 @@ import {
 import "./inbox.css";
 
 const MAX_LENGTH = 4000; // server rule: content is 1-4000 characters, trimmed
+const NEAR_TOP_PX = 120; // how close to the top starts the next page
 
 export default function ChatPanel({
   conversation,
   me,
   onlineIds,
   messages,
+  loading,
+  hasMore,
+  onLoadOlder,
   onSend,
   onAddMembers,
   onRename,
@@ -31,15 +35,55 @@ export default function ChatPanel({
   const [draft, setDraft] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const endRef = useRef(null);
+  const areaRef = useRef(null);
+
+  const anchorRef = useRef(null);
+
+  const oldestId = messages[0]?._id;
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
-  }, [conversation?._id, messages.length]);
+  }, [conversation?._id, messages.at(-1)?._id]);
 
   useEffect(() => {
     setMenuOpen(false);
     setDraft("");
+    anchorRef.current = null;
   }, [conversation?._id]);
+
+  const pageBack = () => {
+    const area = areaRef.current;
+    if (!area || !hasMore || loading) return;
+    // oldestId pins the anchor to this thread state: the request also flips
+    // `loading`, and that re-render must not spend the anchor before the page lands
+    anchorRef.current = {
+      scrollHeight: area.scrollHeight,
+      scrollTop: area.scrollTop,
+      oldestId,
+    };
+    onLoadOlder();
+  };
+
+  const onScroll = () => {
+    if (areaRef.current && areaRef.current.scrollTop <= NEAR_TOP_PX) pageBack();
+  };
+
+  // restore the reading position before paint, then keep paging while the thread
+  // is too short to scroll - otherwise there is no gesture left to ask with
+  useLayoutEffect(() => {
+    const area = areaRef.current;
+    if (!area) return;
+
+    const anchor = anchorRef.current;
+    if (anchor && anchor.oldestId !== oldestId) {
+      anchorRef.current = null;
+      area.scrollTop = anchor.scrollTop + (area.scrollHeight - anchor.scrollHeight);
+      return;
+    }
+
+    if (!anchor && hasMore && !loading && area.scrollHeight <= area.clientHeight)
+      pageBack();
+  }, [oldestId, hasMore, loading]);
 
   if (!conversation) {
     return (
@@ -138,7 +182,13 @@ export default function ChatPanel({
         )}
       </header>
 
-      <div className="message-area">
+      <div className="message-area" ref={areaRef} onScroll={onScroll}>
+        {loading && messages.length > 0 && (
+          <p className="history-loading" role="status">
+            Loading earlier messages…
+          </p>
+        )}
+
         {messages.map((message, index) => {
           const previous = messages[index - 1];
           const mine = message.sender?._id === me._id;
@@ -161,13 +211,23 @@ export default function ChatPanel({
                       <time dateTime={message.createdAt}>{timeOf(message.createdAt)}</time>
                     </div>
                   )}
-                  <div className={mine ? "bubble mine-bubble" : "bubble"}>{message.content}</div>
+                  <div
+                    className={`${mine ? "bubble mine-bubble" : "bubble"}${
+                      message.pending ? " bubble-pending" : ""
+                    }${message.failed ? " bubble-failed" : ""}`}
+                  >
+                    {message.content}
+                  </div>
+                  {message.failed && <span className="message-failed">Not sent</span>}
                 </div>
               </div>
             </Fragment>
           );
         })}
-        {messages.length === 0 && (
+        {messages.length === 0 && loading && (
+          <p className="empty-note">Loading messages…</p>
+        )}
+        {messages.length === 0 && !loading && (
           <p className="empty-note">
             No messages yet. Say hello to {titleOf(conversation, me._id)}.
           </p>
