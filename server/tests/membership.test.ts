@@ -3,6 +3,7 @@ import test, { mock } from "node:test";
 import assert from "node:assert/strict";
 import { Types } from "mongoose";
 import ConversationModel from "../src/models/conversation.model";
+import MessageModel from "../src/models/message.model";
 import UserModel from "../src/models/user.model";
 import {
   addMembersService,
@@ -69,6 +70,20 @@ test("leaving pulls the caller out in one atomic update", async (t) => {
     isGroup: true,
   });
   assert.deepEqual(change, { $pull: { participants: ME } });
+});
+
+test("the last member leaving deletes the group and its messages", async (t) => {
+  t.after(() => mock.restoreAll());
+  updateReturns(docStub({ _id: CONVERSATION_ID, participants: [] }));
+  const dropConversation = mock.method(ConversationModel, "deleteOne", (() =>
+    Promise.resolve({ deletedCount: 1 })) as never);
+  const dropMessages = mock.method(MessageModel, "deleteMany", (() =>
+    Promise.resolve({ deletedCount: 3 })) as never);
+
+  await leaveConversationService(ME, CONVERSATION_ID);
+
+  assert.deepEqual(callArgs(dropConversation)[0], { _id: CONVERSATION_ID });
+  assert.deepEqual(callArgs(dropMessages)[0], { conversationId: CONVERSATION_ID });
 });
 
 test("leaving a direct message is refused, not silently ignored", async (t) => {

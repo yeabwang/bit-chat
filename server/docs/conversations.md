@@ -27,6 +27,8 @@ Requests and responses are `application/json`. Every route sits behind the sessi
 | `groupName`      | `null` on DMs.                                          |
 | `lastActivityAt` | the ordering key for the sidebar.                       |
 | `dmKey`          | sorted participant pair that keeps DMs unique           |
+| `lastReadAt`     | `{ userId: date }` - when each member last opened it    |
+| `unreadCount`    | list endpoint only: messages by others since your mark  |
 
 ---
 
@@ -458,6 +460,8 @@ The leaver is pulled out of `participants`, which is also what ends their access
 
 Their sockets are taken out of the conversation room **before** any further event is emitted, so the leaver stops receiving the group's messages with no reconnect and no refresh.
 
+When the last member leaves, the group and its messages are deleted.
+
 ## The response object
 
 ```json
@@ -465,6 +469,20 @@ Their sockets are taken out of the conversation room **before** any further even
   "message": "Left the conversation"
 }
 ```
+
+---
+
+## POST /api/conversations/:id/read
+
+Marks everything in the conversation as seen by the caller, as of now. There is no body. `GET /api/conversations` then reports `unreadCount: 0` for it until someone else sends again. Nothing is broadcast: only the caller's own count changes.
+
+| Status | When                                          | Body                                                                   |
+| ------ | --------------------------------------------- | ---------------------------------------------------------------------- |
+| `200`  | Marked                                        | `{ "message": "Conversation marked read" }`                            |
+| `401`  | No session                                    | `{ "message": "Not authenticated", ... }`                              |
+| `404`  | No such conversation,**or** not a participant | `{ "message": "Conversation not found or you are not a participant" }` |
+
+The client should call it when a thread is opened and again when a `message:new` lands in the thread that is on screen, so a reload does not resurrect a count the user already cleared.
 
 ---
 

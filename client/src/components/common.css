@@ -26,15 +26,6 @@
 .avatar-stack .slot-1 { right: 0; bottom: 0; z-index: 1; }
 
 .icon {
-  display: inline-block;
+  display: block;
   flex: 0 0 auto;
-  background-color: currentColor;
-  -webkit-mask-image: var(--icon-src);
-  mask-image: var(--icon-src);
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  mask-position: center;
-  -webkit-mask-size: contain;
-  mask-size: contain;
 }
