@@ -637,3 +637,96 @@
   font-size: 11px;
   color: var(--danger, #d94747);
 }
+
+.chat-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 8px 20px;
+  background: color-mix(in srgb, var(--danger, #d94747) 12%, transparent);
+  color: var(--danger, #d94747);
+  font: 500 12px Poppins, sans-serif;
+}
+
+.chat-error button,
+.reply-bar button {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* the quoted message inside a bubble */
+.quote {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 6px;
+  padding: 6px 10px;
+  border-left: 3px solid currentColor;
+  border-radius: 6px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.quote strong {
+  font-weight: 600;
+}
+
+.quote span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.reply-button {
+  display: block;
+  margin-top: 2px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font: 500 11px Poppins, sans-serif;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.message:hover .reply-button,
+.reply-button:focus-visible {
+  opacity: 1;
+}
+
+.reply-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  background: var(--bubble);
+  color: var(--muted);
+  font: 400 12px Poppins, sans-serif;
+}
+
+.reply-bar span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reply-bar strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.message.mine .reply-button {
+  margin-left: auto;
+}

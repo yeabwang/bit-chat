@@ -8,15 +8,31 @@ import SettingsScreen from "./pages/Settings/SettingsScreen";
 import Modal from "./components/Modal/Modal";
 import AppLayout from "./layouts/AppLayout/AppLayout";
 import { useAuth } from "./auth/useAuth";
-import { listConversations, createConversation } from "./api/conversations";
+import { useSocket } from "./socket/useSocket";
+import {
+  listConversations,
+  createConversation,
+  renameGroup as patchGroupName,
+  addMembers as postMembers,
+  leaveConversation,
+  markRead,
+  normalize as normalizeConversation,
+} from "./api/conversations";
 import { listUsers } from "./api/users";
-import { listMessages, sendMessage as postMessage } from "./api/messages";
+import {
+  listMessages,
+  sendMessage as postMessage,
+  normalize as normalizeMessage,
+} from "./api/messages";
 import { friendRequests } from "./data/friendRequests";
 import {
+  applyMessageToList,
   byActivity,
   EMPTY_THREAD,
   mergeOlderPage,
   putMessage,
+  replaceConversation,
+  upsertConversation,
 } from "./data/conversation";
 import "./styles/global.css";
 import "./styles/responsive.css";
@@ -27,6 +43,8 @@ export default function App() {
   const [screen, setScreen] = useState("inbox");
   const [conversations, setConversations] = useState([]);
   const [users, setUsers] = useState([]);
+  // seeded from GET /api/users, then presence:* over the socket is authoritative
+  const [onlineIds, setOnlineIds] = useState(() => new Set());
   // conversation id -> { items, hasMore, nextCursor, loading }
   const [threads, setThreads] = useState({});
   const requested = useRef(new Set());
@@ -34,6 +52,8 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [modal, setModal] = useState(null);
   const [mobileView, setMobileView] = useState("list");
+  // bumped on socket reconnect so already-fetched threads reload and close the gap
+  const [epoch, setEpoch] = useState(0);
 
   const me = user;
   const meId = user?._id ?? null;
@@ -53,21 +73,19 @@ export default function App() {
       .then((list) => live && setConversations(list))
       .catch(() => live && setConversations([]));
     listUsers()
-      .then((list) => live && setUsers(list))
+      .then((list) => {
+        if (!live) return;
+        setUsers(list);
+        setOnlineIds(new Set(list.filter((u) => u.isOnline).map((u) => u._id)));
+      })
       .catch(() => live && setUsers([]));
     return () => {
       live = false;
     };
   }, [meId]);
 
-  // the socket feed replaces it later
-  const onlineIds = useMemo(
-    () => new Set(users.filter((u) => u.isOnline).map((u) => u._id)),
-    [users],
-  );
-
   const ordered = useMemo(() => [...conversations].sort(byActivity), [conversations]);
-  const active = ordered.find((c) => c._id === activeId) ?? ordered[0] ?? null;
+  const active = ordered.find((c) => c._id === activeId) ?? null;
 
   const activeThread = (active && threads[active._id]) ?? EMPTY_THREAD;
 
@@ -90,6 +108,53 @@ export default function App() {
     [],
   );
 
+  const activeRef = useRef(null);
+  activeRef.current = active?._id ?? null;
+
+  // server/docs/protocol.md - fanout only, the client emits nothing
+  useSocket(meId, {
+    "presence:sync": ({ userIds }) => setOnlineIds(new Set(userIds)),
+    "presence:online": ({ userId }) =>
+      setOnlineIds((ids) => new Set(ids).add(userId)),
+    "presence:offline": ({ userId }) =>
+      setOnlineIds((ids) => {
+        const next = new Set(ids);
+        next.delete(userId);
+        return next;
+      }),
+    "message:new": ({ message }) => {
+      const normalized = normalizeMessage(message);
+      const seen = document.visibilityState === "visible" ? activeRef.current : null;
+      if (requested.current.has(normalized.conversationId)) {
+        patchThread(normalized.conversationId, (thread) => putMessage(thread, normalized));
+      }
+      setConversations((all) => applyMessageToList(all, normalized, seen));
+      if (normalized.conversationId === seen && normalized.sender?._id !== meId) {
+        markRead(seen).catch(() => {});
+      }
+    },
+    "conversation:new": ({ conversation }) =>
+      setConversations((all) => upsertConversation(all, normalizeConversation(conversation))),
+    "conversation:updated": ({ conversation }) =>
+      setConversations((all) => replaceConversation(all, normalizeConversation(conversation))),
+    "conversation:removed": ({ conversationId }) => {
+      setConversations((all) => all.filter((c) => c._id !== conversationId));
+      setThreads(({ [conversationId]: _dropped, ...rest }) => rest);
+      requested.current.delete(conversationId);
+      if (activeRef.current === conversationId) {
+        setActiveId(null);
+        setMobileView("list");
+      }
+    },
+    reconnect: () => {
+      listConversations().then(setConversations).catch(() => {});
+      requested.current.clear();
+      setThreads({});
+      setEpoch((n) => n + 1);
+    },
+    unauthorized: signOut,
+  });
+
   // GET /api/conversations/:id/messages
   useEffect(() => {
     const id = active?._id;
@@ -108,7 +173,7 @@ export default function App() {
     return () => {
       live = false;
     };
-  }, [active?._id, patchThread]);
+  }, [active?._id, epoch, patchThread]);
 
   const loadOlder = useCallback(async () => {
     const id = active?._id;
@@ -124,10 +189,25 @@ export default function App() {
     }
   }, [active?._id, threads, patchThread]);
 
+  // back to a tab whose open thread filled up while hidden: clear it now
+  useEffect(() => {
+    const onVisible = () => {
+      const id = activeRef.current;
+      if (document.visibilityState !== "visible" || !id) return;
+      setConversations((all) =>
+        all.map((c) => (c._id === id && c.unreadCount ? { ...c, unreadCount: 0 } : c)),
+      );
+      markRead(id).catch(() => {});
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
+
   const openConversation = (id) => {
     setActiveId(id);
     setConversations((all) => all.map((c) => (c._id === id ? { ...c, unreadCount: 0 } : c)));
     setMobileView("chat");
+    markRead(id).catch(() => {});
   };
 
   // POST /api/conversations 
@@ -159,7 +239,7 @@ export default function App() {
 
   // POST /api/conversations/:id/messages, appended optimistically first
   const sendMessage = useCallback(
-    async (content) => {
+    async ({ content, replyTo = null }) => {
       const conversationId = active?._id;
       if (!conversationId) return;
 
@@ -175,7 +255,7 @@ export default function App() {
         conversationId,
         sender: me,
         content,
-        replyTo: null,
+        replyTo,
         createdAt: new Date().toISOString(),
         pending: true,
       };
@@ -183,7 +263,10 @@ export default function App() {
       bumpConversation(conversationId, optimistic);
 
       try {
-        const saved = await postMessage(conversationId, { content });
+        const saved = await postMessage(conversationId, {
+          content,
+          ...(replyTo ? { replyToId: replyTo._id } : {}),
+        });
         patchThread(conversationId, (thread) => putMessage(thread, saved, localId));
         bumpConversation(conversationId, saved);
       } catch {
@@ -203,15 +286,40 @@ export default function App() {
     [active, me, patchThread, bumpConversation],
   );
 
-  // PATCH /api/conversations/:id - a rename is not activity, so the row must not move
-  const renameGroup = (groupName) =>
-    setConversations((all) =>
-      all.map((c) => (c._id === active?._id ? { ...c, groupName } : c)),
-    );
+  // PATCH /api/conversations/:id - a rename is not activity, so the row must not move.
+  // Applied optimistically; the server's copy (also broadcast as conversation:updated) wins.
+  const renameGroup = async (groupName) => {
+    const id = active?._id;
+    if (!id) return;
+    const previous = active.groupName;
+    setConversations((all) => all.map((c) => (c._id === id ? { ...c, groupName } : c)));
+    try {
+      const saved = await patchGroupName(id, groupName);
+      setConversations((all) => replaceConversation(all, saved));
+    } catch (failure) {
+      setConversations((all) =>
+        all.map((c) => (c._id === id ? { ...c, groupName: previous } : c)),
+      );
+      throw failure;
+    }
+  };
 
-  // DELETE /api/conversations/:id/members/me, then conversation:removed
-  const leaveGroup = () => {
-    setConversations((all) => all.filter((c) => c._id !== active?._id));
+  // POST /api/conversations/:id/members - the Modal owns pending/error state,
+  // as ChatPanel does for rename and leave: mutations throw, the caller shows the message
+  const addMembers = async (members) => {
+    const saved = await postMembers(active._id, members);
+    setConversations((all) => replaceConversation(all, saved));
+  };
+
+  // DELETE /api/conversations/:id/members/me - the server also sends conversation:removed,
+  // but the local drop happens here so the UI does not wait on the socket
+  const leaveGroup = async () => {
+    const id = active?._id;
+    if (!id) return;
+    await leaveConversation(id);
+    setConversations((all) => all.filter((c) => c._id !== id));
+    setThreads(({ [id]: _dropped, ...rest }) => rest);
+    requested.current.delete(id);
     setActiveId(null);
     setMobileView("list");
   };
@@ -279,6 +387,7 @@ export default function App() {
         me={me}
         onlineIds={onlineIds}
         onCreate={startConversation}
+        onAddMembers={addMembers}
         close={() => setModal(null)}
       />
     </AppLayout>

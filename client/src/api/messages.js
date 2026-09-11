@@ -2,7 +2,7 @@ import { request } from "./client.js";
 import { withAvatar } from "../lib/avatar.js";
 
 // sender and the quoted message's sender are populated with name/userName/avatar
-const normalize = (message) => ({
+export const normalize = (message) => ({
   ...message,
   sender: withAvatar(message.sender),
   replyTo: message.replyTo

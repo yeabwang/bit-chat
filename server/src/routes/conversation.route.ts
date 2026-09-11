@@ -6,6 +6,7 @@ import {
   getSingleConversationController,
   getUserConversationsController,
   leaveConversationController,
+  markReadController,
   renameGroupController,
 } from "../controllers/conversation.controller";
 import {
@@ -23,6 +24,7 @@ const conversationRoutes = Router()
   .patch("/:id", renameGroupController)
   .post("/:id/members", addMembersController)
   .delete("/:id/members/me", leaveConversationController)
+  .post("/:id/read", markReadController)
   .get("/:id/messages", getMessagesController)
   .post("/:id/messages", sendMessageController);
 

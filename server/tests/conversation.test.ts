@@ -3,12 +3,14 @@ import test, { mock } from "node:test";
 import assert from "node:assert/strict";
 import { Types } from "mongoose";
 import ConversationModel from "../src/models/conversation.model";
+import MessageModel from "../src/models/message.model";
 import UserModel from "../src/models/user.model";
 import {
   createConversationService,
   dmKeyFor,
   getSingleConversationService,
   getUserConversationsService,
+  markReadService,
 } from "../src/services/conversation.service";
 import {
   conversationIdSchema,
@@ -222,6 +224,61 @@ test("the conversation list is filtered to the caller and ordered by activity", 
   assert.deepEqual(callArgs(find)[0], { participants: ME });
   // updatedAt would also reorder the sidebar on a rename, which is not activity
   assert.deepEqual(query.calls.sort[0][0], { lastActivityAt: -1 });
+});
+
+test("unreadCount counts other people's messages since the caller's read mark", async (t) => {
+  t.after(() => mock.restoreAll());
+  const readAt = new Date("2026-09-01T00:00:00.000Z");
+  const rows = [
+    { _id: CONVERSATION_ID, lastReadAt: { [String(ME)]: readAt } },
+    { _id: ALICE, lastReadAt: {} },
+  ];
+  mock.method(ConversationModel, "find", (() => queryStub(rows)) as never);
+  const count = mock.method(MessageModel, "countDocuments", (() =>
+    Promise.resolve(2)) as never);
+
+  const list = await getUserConversationsService(ME);
+
+  assert.deepEqual(
+    list.map((c) => c.unreadCount),
+    [2, 2],
+  );
+  assert.deepEqual(callArgs(count)[0], {
+    conversationId: CONVERSATION_ID,
+    sender: { $ne: ME },
+    createdAt: { $gt: readAt },
+  });
+  // never read: everything by someone else counts
+  assert.deepEqual(
+    (callArgs(count, 1)[0] as { createdAt: { $gt: Date } }).createdAt.$gt,
+    new Date(0),
+  );
+});
+
+test("marking read stamps the caller's own key and is scoped to membership", async (t) => {
+  t.after(() => mock.restoreAll());
+  const update = mock.method(ConversationModel, "updateOne", (() =>
+    Promise.resolve({ matchedCount: 1 })) as never);
+
+  await markReadService(ME, CONVERSATION_ID);
+
+  const [filter, change] = callArgs(update) as [
+    Record<string, unknown>,
+    Record<string, unknown>,
+  ];
+  assert.deepEqual(filter, { _id: CONVERSATION_ID, participants: ME });
+  assert.deepEqual(Object.keys(change.$set as object), [`lastReadAt.${ME}`]);
+});
+
+test("marking read a conversation you are not in is a 404", async (t) => {
+  t.after(() => mock.restoreAll());
+  mock.method(ConversationModel, "updateOne", (() =>
+    Promise.resolve({ matchedCount: 0 })) as never);
+
+  await assert.rejects(
+    markReadService(ME, CONVERSATION_ID),
+    (error: { statusCode?: number }) => error.statusCode === 404,
+  );
 });
 
 test("a non participant gets a 404 from a conversation read", async (t) => {

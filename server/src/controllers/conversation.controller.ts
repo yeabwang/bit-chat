@@ -13,6 +13,7 @@ import {
   getSingleConversationService,
   getUserConversationsService,
   leaveConversationService,
+  markReadService,
   renameGroupService,
 } from "../services/conversation.service";
 import {
@@ -63,6 +64,15 @@ export const getUserConversationsController = asyncHandler(
     });
   },
 );
+
+// POST /:id/read - the caller has seen everything up to now; the list reports
+// unreadCount from this mark. Nothing is broadcast: only the reader's own count changes.
+export const markReadController = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = conversationIdSchema.parse(req.params);
+  await markReadService(req.user!._id, id);
+
+  return res.status(HTTPSTATUS.OK).json({ message: "Conversation marked read" });
+});
 
 export const getSingleConversationController = asyncHandler(
   async (req: Request, res: Response) => {

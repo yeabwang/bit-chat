@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Avatar from "../../components/Avatar/Avatar";
 import AvatarStack from "../../components/Avatar/AvatarStack";
+import { errorMessage } from "../../api/client";
 import {
   titleOf,
   avatarsOf,
@@ -33,6 +34,8 @@ export default function ChatPanel({
   onBack,
 }) {
   const [draft, setDraft] = useState("");
+  const [replyTo, setReplyTo] = useState(null);
+  const [error, setError] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const endRef = useRef(null);
   const areaRef = useRef(null);
@@ -48,6 +51,8 @@ export default function ChatPanel({
   useEffect(() => {
     setMenuOpen(false);
     setDraft("");
+    setReplyTo(null);
+    setError(null);
     anchorRef.current = null;
   }, [conversation?._id]);
 
@@ -101,8 +106,9 @@ export default function ChatPanel({
   const submit = (event) => {
     event.preventDefault();
     if (!trimmed) return;
-    onSend(trimmed);
+    onSend({ content: trimmed, replyTo });
     setDraft("");
+    setReplyTo(null);
   };
 
   const onKeyDown = (event) => {
@@ -111,17 +117,25 @@ export default function ChatPanel({
     }
   };
 
+  // rename and leave throw on failure; the message lands under the header
+  const attempt = (action, fallback) =>
+    Promise.resolve()
+      .then(action)
+      .catch((failure) => setError(errorMessage(failure, fallback)));
+
   const rename = () => {
     const next = window.prompt("Group name", conversation.groupName ?? "");
     setMenuOpen(false);
     const clean = next?.trim();
-    if (clean && clean !== conversation.groupName) onRename(clean);
+    if (clean && clean !== conversation.groupName) {
+      attempt(() => onRename(clean), "Could not rename the group");
+    }
   };
 
   const leave = () => {
     setMenuOpen(false);
     if (window.confirm(`Leave “${titleOf(conversation, me._id)}”? You will lose access to its history.`)) {
-      onLeave();
+      attempt(onLeave, "Could not leave the group");
     }
   };
 
@@ -182,6 +196,13 @@ export default function ChatPanel({
         )}
       </header>
 
+      {error && (
+        <p className="chat-error" role="alert">
+          {error}
+          <button type="button" onClick={() => setError(null)} aria-label="Dismiss">×</button>
+        </p>
+      )}
+
       <div className="message-area" ref={areaRef} onScroll={onScroll}>
         {loading && messages.length > 0 && (
           <p className="history-loading" role="status">
@@ -216,8 +237,24 @@ export default function ChatPanel({
                       message.pending ? " bubble-pending" : ""
                     }${message.failed ? " bubble-failed" : ""}`}
                   >
+                    {message.replyTo && (
+                      <blockquote className="quote">
+                        <strong>{message.replyTo.sender?.name}</strong>
+                        <span>{message.replyTo.content}</span>
+                      </blockquote>
+                    )}
                     {message.content}
                   </div>
+                  {!message.pending && !message.failed && (
+                    <button
+                      type="button"
+                      className="reply-button"
+                      onClick={() => setReplyTo(message)}
+                      aria-label={`Reply to ${message.sender?.name}`}
+                    >
+                      Reply
+                    </button>
+                  )}
                   {message.failed && <span className="message-failed">Not sent</span>}
                 </div>
               </div>
@@ -236,6 +273,14 @@ export default function ChatPanel({
       </div>
 
       <form className="composer" onSubmit={submit}>
+        {replyTo && (
+          <div className="reply-bar">
+            <span>
+              Replying to <strong>{replyTo.sender?.name}</strong>: {replyTo.content}
+            </span>
+            <button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply">×</button>
+          </div>
+        )}
         <textarea
           value={draft}
           onChange={(event) => setDraft(event.target.value.slice(0, MAX_LENGTH))}

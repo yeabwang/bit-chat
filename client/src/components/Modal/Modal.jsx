@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { errorMessage } from "../../api/client";
 import { createPortal } from "react-dom";
 import Avatar from "../Avatar/Avatar";
 import { titleOf, newConversationPayload } from "../../data/conversation";
@@ -15,6 +16,7 @@ export default function Modal({
   me,
   onlineIds,
   onCreate,
+  onAddMembers,
   close,
 }) {
   const [query, setQuery] = useState("");
@@ -60,14 +62,16 @@ export default function Modal({
   // the discriminated union the server validates: a single pick is a DM, two or more a group
   const submit = async () => {
     if (!canSubmit || pending) return;
-    if (type !== "new") return close();
     setPending(true);
     setError(null);
     try {
-      await onCreate(newConversationPayload(picked, groupName));
+      if (type === "members") await onAddMembers(picked);
+      else await onCreate(newConversationPayload(picked, groupName));
       close();
     } catch (failure) {
-      setError(failure?.body?.message ?? failure?.message ?? "Could not start the chat");
+      setError(
+        errorMessage(failure, type === "members" ? "Could not add members" : "Could not start the chat"),
+      );
       setPending(false);
     }
   };

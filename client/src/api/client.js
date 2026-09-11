@@ -18,6 +18,10 @@ export class ApiError extends Error {
   }
 }
 
+// the server's envelope carries a human message; network failures only have error.message
+export const errorMessage = (failure, fallback) =>
+  failure?.body?.message ?? failure?.message ?? fallback;
+
 export async function request(path, { method = "GET", body } = {}) {
   const response = await fetch(`${BASE}${path}`, {
     method,
