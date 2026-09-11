@@ -11,7 +11,7 @@ export const errorHandler: ErrorRequestHandler = (
   res,
   _next: NextFunction,
 ) => {
-  console.error(`Error occurred: ${req.path}`, error);
+  console.error(`Error occurred: ${req.path}`, error?.stack ?? error?.message ?? error);
 
   if (error instanceof ZodError) {
     return res.status(HTTPSTATUS.BAD_REQUEST).json({

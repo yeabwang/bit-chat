@@ -7,8 +7,9 @@ import FriendsScreen from "./pages/Friends/FriendsScreen";
 import SettingsScreen from "./pages/Settings/SettingsScreen";
 import Modal from "./components/Modal/Modal";
 import AppLayout from "./layouts/AppLayout/AppLayout";
+import { useAuth } from "./auth/useAuth";
 import {
-  currentUser,
+  currentUser as seedMe,
   conversations as seedConversations,
   messagesByConversation,
   onlineUserIds,
@@ -19,7 +20,7 @@ import "./styles/global.css";
 import "./styles/responsive.css";
 
 export default function App() {
-  const [authenticated, setAuthenticated] = useState(false);
+  const { user, booting, signUp, signIn, signOut } = useAuth();
   const [authMode, setAuthMode] = useState("signup");
   const [screen, setScreen] = useState("inbox");
   const [conversations, setConversations] = useState(seedConversations);
@@ -28,6 +29,8 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [modal, setModal] = useState(null);
   const [mobileView, setMobileView] = useState("list");
+
+  const me = user && { ...user, _id: seedMe._id };
 
   // GET /api/conversations 
   const ordered = useMemo(() => [...conversations].sort(byActivity), [conversations]);
@@ -55,7 +58,7 @@ export default function App() {
     const message = {
       _id: `local-${Date.now()}`,
       conversationId: active._id,
-      sender: currentUser,
+      sender: me,
       content,
       replyTo: null,
       createdAt: now,
@@ -82,8 +85,14 @@ export default function App() {
     setMobileView("list");
   };
 
-  if (!authenticated) {
-    const authProps = { onModeChange: setAuthMode, onEnter: () => setAuthenticated(true) };
+
+  if (booting) return <main className="center-screen" aria-busy="true" />;
+
+  if (!user) {
+    const authProps = {
+      onModeChange: setAuthMode,
+      onEnter: authMode === "signup" ? signUp : signIn,
+    };
     return authMode === "signup" ? <Signup {...authProps} /> : <Login {...authProps} />;
   }
 
@@ -93,7 +102,7 @@ export default function App() {
         screen,
         setScreen: selectScreen,
         counts,
-        onLogout: () => window.location.reload(),
+        onLogout: signOut,
       }}
     >
       {screen === "inbox" ? (
@@ -101,7 +110,7 @@ export default function App() {
           <div className={`mobile-pane mobile-list ${mobileView === "list" ? "visible" : "hidden"}`}>
             <ConversationList
               conversations={ordered}
-              me={currentUser}
+              me={me}
               onlineIds={onlineUserIds}
               activeId={active?._id ?? null}
               onSelect={openConversation}
@@ -113,7 +122,7 @@ export default function App() {
           <div className={`mobile-pane mobile-chat ${mobileView === "chat" ? "visible" : "hidden"}`}>
             <ChatPanel
               conversation={active}
-              me={currentUser}
+              me={me}
               onlineIds={onlineUserIds}
               messages={active ? threads[active._id] ?? [] : []}
               onSend={sendMessage}
@@ -127,12 +136,12 @@ export default function App() {
       ) : screen === "friends" ? (
         <FriendsScreen requests={friendRequests} />
       ) : (
-        <SettingsScreen user={currentUser} onLogout={() => window.location.reload()} />
+        <SettingsScreen user={user} onLogout={signOut} />
       )}
       <Modal
         type={modal}
         conversation={active}
-        me={currentUser}
+        me={me}
         onlineIds={onlineUserIds}
         close={() => setModal(null)}
       />
