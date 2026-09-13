@@ -30,7 +30,6 @@ const friendshipSchema = new Schema<FriendshipDocument>(
     pairKey: {
       type: String,
       required: true,
-      unique: true,
     },
 
     status: {
