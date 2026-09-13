@@ -1,5 +1,6 @@
 import { Types } from "mongoose";
 import ConversationModel, { ConversationDocument } from "../models/conversation.model";
+import MessageModel from "../models/message.model";
 import UserModel from "../models/user.model";
 import { BadRequestException, NotFoundException } from "../utils/app-error";
 import {
@@ -94,14 +95,38 @@ export const createConversationService = async (
   };
 };
 
-export const getUserConversationsService = (userId: Types.ObjectId) =>
-  ConversationModel.find({ participants: userId })
+export const getUserConversationsService = async (userId: Types.ObjectId) => {
+  const conversations = await ConversationModel.find({ participants: userId })
     .populate("participants", PARTICIPANT_FIELDS)
     .populate({
       path: "lastMessage",
       populate: { path: "sender", select: PARTICIPANT_FIELDS },
     })
-    .sort({ lastActivityAt: -1 });
+    .sort({ lastActivityAt: -1 })
+    .lean();
+
+  // ponytail: one count per conversation. An $lookup aggregate if inboxes get long.
+  const key = String(userId);
+  return Promise.all(
+    conversations.map(async (conversation) => ({
+      ...conversation,
+      unreadCount: await MessageModel.countDocuments({
+        conversationId: conversation._id,
+        sender: { $ne: userId },
+        createdAt: { $gt: conversation.lastReadAt?.[key] ?? new Date(0) },
+      }),
+    })),
+  );
+};
+
+export const markReadService = async (userId: Types.ObjectId, conversationId: string) => {
+  const result = await ConversationModel.updateOne(
+    { _id: conversationId, participants: userId },
+    { $set: { [`lastReadAt.${userId}`]: new Date() } },
+  );
+  if (result.matchedCount === 0)
+    throw new NotFoundException("Conversation not found or you are not a participant");
+};
 
 export const getUserConversationIdsService = async (userId: string) => {
   const conversations = await ConversationModel.find(
@@ -164,9 +189,15 @@ export const leaveConversationService = async (
     { new: true },
   ).populate("participants", PARTICIPANT_FIELDS);
 
-  // ponytail: a group whose last member leaves is left in place, unreachable by
-  // anyone. Add a sweep if orphans ever matter.
   if (!conversation) await explainGroupFailure(conversationId, userId);
+
+  // nobody left to read it: drop the group and its history
+  if (conversation!.participants?.length === 0) {
+    await Promise.all([
+      ConversationModel.deleteOne({ _id: conversationId }),
+      MessageModel.deleteMany({ conversationId }),
+    ]);
+  }
 
   return conversation!;
 };

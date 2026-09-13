@@ -8,6 +8,8 @@ export interface ConversationDocument extends Document {
   groupName?: string | null;
   dmKey?: string;
   createdBy: mongoose.Types.ObjectId;
+  // user id -> when that user last opened the thread; unread = messages after it
+  lastReadAt: Map<string, Date>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -49,6 +51,12 @@ const conversationSchema = new Schema<ConversationDocument>(
       type: Schema.Types.ObjectId,
       ref: "Message",
       default: null,
+    },
+
+    lastReadAt: {
+      type: Map,
+      of: Date,
+      default: {},
     },
 
     // new, empty conversation sorts to the top; the message layer bumps it on every send.

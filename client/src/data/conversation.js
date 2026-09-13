@@ -85,3 +85,92 @@ export function startsRun(message, previous) {
   const gap = new Date(message.createdAt) - new Date(previous.createdAt);
   return !(gap >= 0 && gap < RUN_WINDOW_MS);
 }
+
+/**
+ * The POST /api/conversations body for a set of picked user ids. One pick is a
+ * DM; two or more is a group, which the server requires a name for. The server
+ * validates a discriminated union on isGroup, so the wrong branch is a 400.
+ */
+export function newConversationPayload(picked, groupName) {
+  return picked.length === 1
+    ? { isGroup: false, participantId: picked[0] }
+    : { isGroup: true, groupName: (groupName ?? "").trim(), participants: picked };
+}
+
+/** A thread before its first page lands. */
+export const EMPTY_THREAD = { items: [], hasMore: false, nextCursor: null, loading: false };
+
+/**
+ * Put a message into a thread. `replaceId` swaps an optimistic copy for the
+ * server's; without it the message is appended. Either way an id already in the
+ * thread is overwritten in place, so a socket echo of our own send is not a
+ * duplicate.
+ */
+export function putMessage(thread = EMPTY_THREAD, message, replaceId = null) {
+  // drop the optimistic copy first: the socket echo can land before the POST
+  // reply, in which case the server's id is already in the thread
+  const items = replaceId ? thread.items.filter((m) => m._id !== replaceId) : thread.items;
+  const at = items.findIndex((m) => m._id === message._id);
+  return {
+    ...thread,
+    items: at === -1 ? [...items, message] : items.map((m, i) => (i === at ? message : m)),
+  };
+}
+
+/** Prepend an older page. Its items are already oldest-first. */
+export function mergeOlderPage(thread = EMPTY_THREAD, page) {
+  const known = new Set(thread.items.map((m) => m._id));
+  return {
+    ...thread,
+    items: [...page.items.filter((m) => !known.has(m._id)), ...thread.items],
+    hasMore: page.hasMore,
+    nextCursor: page.nextCursor,
+    loading: false,
+  };
+}
+
+/**
+ * Socket reducers. Each takes the current list and returns the next one; the
+ * caller decides what "active" means. Kept pure so node --test covers them.
+ */
+
+/** Insert, or replace when the id is already known (a repeat DM answers with the same thread). */
+export function upsertConversation(conversations, conversation) {
+  return conversations.some((c) => c._id === conversation._id)
+    ? conversations.map((c) => (c._id === conversation._id ? conversation : c))
+    : [conversation, ...conversations];
+}
+
+/**
+ * Replace in place, keeping the local unread count. Never reorders: a rename
+ * is not activity and the server does not move lastActivityAt for one.
+ */
+export function replaceConversation(conversations, conversation) {
+  return conversations.map((c) =>
+    c._id === conversation._id
+      ? {
+          ...conversation,
+          unreadCount: c.unreadCount ?? 0,
+          // rename / add-members responses carry lastMessage as a bare id: keep the local preview
+          lastMessage: conversation.lastMessage?.sender ? conversation.lastMessage : c.lastMessage,
+        }
+      : c,
+  );
+}
+
+/**
+ * message:new for the sidebar. Bumps preview and activity, and counts unread
+ * unless the thread is open on screen. Only moves forward: an echo of an
+ * older send must not pull the row back up the list.
+ */
+export function applyMessageToList(conversations, message, activeId) {
+  return conversations.map((c) => {
+    if (c._id !== message.conversationId) return c;
+    const forward = new Date(message.createdAt) >= new Date(c.lastActivityAt ?? 0);
+    return {
+      ...c,
+      ...(forward ? { lastMessage: message, lastActivityAt: message.createdAt } : {}),
+      unreadCount: c._id === activeId ? 0 : (c.unreadCount ?? 0) + 1,
+    };
+  });
+}

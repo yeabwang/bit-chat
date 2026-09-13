@@ -1,6 +1,4 @@
 import { useMemo } from "react";
-import { ASSETS } from "../../data/assets";
-import { users } from "../../data/mockData";
 import Avatar from "../../components/Avatar/Avatar";
 import AvatarStack from "../../components/Avatar/AvatarStack";
 import Icon from "../../components/Icon/Icon";
@@ -16,6 +14,7 @@ import "./inbox.css";
 
 export default function ConversationList({
   conversations,
+  users,
   me,
   onlineIds,
   activeId,
@@ -41,7 +40,7 @@ export default function ConversationList({
         <div className="title-row">
           <h2>Inbox</h2>
           <button className="icon-button" onClick={onNewMessage} title="New message" aria-label="New message">
-            <Icon src={ASSETS.edit} size={18} />
+            <Icon name="edit" size={18} />
           </button>
         </div>
         <p className="inbox-summary">
@@ -56,7 +55,7 @@ export default function ConversationList({
       </header>
 
       <div className="search-box">
-        <Icon src={ASSETS.search} size={16} />
+        <Icon name="search" size={16} />
         <input
           type="search"
           placeholder="Search conversations"
@@ -123,7 +122,11 @@ export default function ConversationList({
         })}
 
         {filtered.length === 0 && (
-          <li className="empty-note">No conversations match “{query}”.</li>
+          <li className="empty-note">
+            {conversations.length === 0
+              ? "No conversations yet. Start one with the new message button."
+              : `No conversations match “${query}”.`}
+          </li>
         )}
       </ul>
     </section>
