@@ -3,6 +3,7 @@ import test, { mock } from "node:test";
 import assert from "node:assert/strict";
 import { Types } from "mongoose";
 import ConversationModel from "../src/models/conversation.model";
+import FriendshipModel from "../src/models/friendship.model";
 import MessageModel from "../src/models/message.model";
 import UserModel from "../src/models/user.model";
 import {
@@ -23,9 +24,13 @@ const ALICE = "507f1f77bcf86cd799439012";
 const BOB = "507f1f77bcf86cd799439013";
 const CONVERSATION_ID = "507f1f77bcf86cd7994390ff";
 
-const allUsersExist = () =>
+const allUsersExist = (friends = true) => {
   mock.method(UserModel, "countDocuments", ((query: { _id: { $in: string[] } }) =>
     Promise.resolve(query._id.$in.length)) as never);
+  mock.method(FriendshipModel, "countDocuments", ((query: {
+    pairKey: { $in: string[] };
+  }) => Promise.resolve(friends ? query.pairKey.$in.length : 0)) as never);
+};
 
 const noUsersExist = () =>
   mock.method(UserModel, "countDocuments", (() => Promise.resolve(0)) as never);
@@ -116,6 +121,18 @@ test("a DM with an unknown user is a 404", async (t) => {
   await assert.rejects(
     createConversationService(ME, { isGroup: false, participantId: ALICE }),
     (error: { statusCode?: number }) => error.statusCode === 404,
+  );
+  assert.equal(upsert.mock.callCount(), 0);
+});
+
+test("a DM cannot be opened with someone who is not an accepted friend", async (t) => {
+  t.after(() => mock.restoreAll());
+  allUsersExist(false);
+  const upsert = upsertReturns(docStub({ _id: "c" }), false);
+
+  await assert.rejects(
+    createConversationService(ME, { isGroup: false, participantId: ALICE }),
+    /only message and add accepted friends/,
   );
   assert.equal(upsert.mock.callCount(), 0);
 });

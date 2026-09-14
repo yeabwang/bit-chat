@@ -30,6 +30,13 @@
 .settings-card h1 { margin-bottom: 24px; }
 
 .friends-head p { margin: 6px 0 0; color: var(--muted); font: 400 13px Poppins, sans-serif; }
+.friends-error {
+  margin: 0;
+  padding: 10px 16px;
+  background: var(--danger-tint);
+  color: var(--danger);
+  font: 400 12px Poppins, sans-serif;
+}
 
 .tabs {
   display: flex;
@@ -95,6 +102,7 @@
 .request-row .decline { background: var(--panel); border: 1px solid var(--field-border); color: var(--text-secondary); }
 .request-row .decline:hover { border-color: var(--danger); color: var(--danger); background: var(--danger-tint); }
 .request-row button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.request-row button:disabled { opacity: 0.6; cursor: wait; }
 
 .pending-tag {
   padding: 5px 10px;

@@ -20,11 +20,17 @@ import {
 } from "./api/conversations";
 import { listUsers } from "./api/users";
 import {
+  acceptFriendRequest as acceptFriendRequestApi,
+  listFriends,
+  listFriendRequests,
+  removeFriendRequest as removeFriendRequestApi,
+  sendFriendRequest as sendFriendRequestApi,
+} from "./api/friends";
+import {
   listMessages,
   sendMessage as postMessage,
   normalize as normalizeMessage,
 } from "./api/messages";
-import { friendRequests } from "./data/friendRequests";
 import {
   applyMessageToList,
   byActivity,
@@ -43,6 +49,8 @@ export default function App() {
   const [screen, setScreen] = useState("inbox");
   const [conversations, setConversations] = useState([]);
   const [users, setUsers] = useState([]);
+  const [friends, setFriends] = useState([]);
+  const [friendRequests, setFriendRequests] = useState({ incoming: [], outgoing: [] });
   // seeded from GET /api/users, then presence:* over the socket is authoritative
   const [onlineIds, setOnlineIds] = useState(() => new Set());
   // conversation id -> { items, hasMore, nextCursor, loading }
@@ -58,11 +66,22 @@ export default function App() {
   const me = user;
   const meId = user?._id ?? null;
 
+  const refreshSocial = useCallback(async () => {
+    const [nextFriends, nextRequests] = await Promise.all([
+      listFriends(),
+      listFriendRequests(),
+    ]);
+    setFriends(nextFriends);
+    setFriendRequests(nextRequests);
+  }, []);
+
   // GET /api/conversations + GET /api/users, once per signed-in user
   useEffect(() => {
     if (!meId) {
       setConversations([]);
       setUsers([]);
+      setFriends([]);
+      setFriendRequests({ incoming: [], outgoing: [] });
       setThreads({});
       requested.current.clear();
       setActiveId(null);
@@ -79,15 +98,34 @@ export default function App() {
         setOnlineIds(new Set(list.filter((u) => u.isOnline).map((u) => u._id)));
       })
       .catch(() => live && setUsers([]));
+    refreshSocial().catch(() => {
+      if (!live) return;
+      setFriends([]);
+      setFriendRequests({ incoming: [], outgoing: [] });
+    });
     return () => {
       live = false;
     };
-  }, [meId]);
+  }, [meId, refreshSocial]);
 
   const ordered = useMemo(() => [...conversations].sort(byActivity), [conversations]);
   const active = ordered.find((c) => c._id === activeId) ?? null;
 
   const activeThread = (active && threads[active._id]) ?? EMPTY_THREAD;
+  const friendIds = useMemo(
+    () => new Set(friends.map((friendship) => friendship.user._id)),
+    [friends],
+  );
+  const friendUsers = useMemo(
+    () => users.filter((listedUser) => friendIds.has(listedUser._id)),
+    [users, friendIds],
+  );
+  const canSendToActive =
+    !active ||
+    active.isGroup ||
+    (active.participants ?? []).some(
+      (participant) => participant._id !== meId && friendIds.has(participant._id),
+    );
 
   const counts = {
     inbox: conversations.reduce((total, c) => total + (c.unreadCount ?? 0), 0),
@@ -128,7 +166,7 @@ export default function App() {
       if (requested.current.has(normalized.conversationId)) {
         patchThread(normalized.conversationId, (thread) => putMessage(thread, normalized));
       }
-      setConversations((all) => applyMessageToList(all, normalized, seen));
+      setConversations((all) => applyMessageToList(all, normalized, seen, meId));
       if (normalized.conversationId === seen && normalized.sender?._id !== meId) {
         markRead(seen).catch(() => {});
       }
@@ -146,8 +184,18 @@ export default function App() {
         setMobileView("list");
       }
     },
+    "conversation:read": ({ conversationId }) =>
+      setConversations((all) =>
+        all.map((conversation) =>
+          conversation._id === conversationId
+            ? { ...conversation, unreadCount: 0 }
+            : conversation,
+        ),
+      ),
+    "friendship:changed": () => refreshSocial().catch(() => {}),
     reconnect: () => {
       listConversations().then(setConversations).catch(() => {});
+      refreshSocial().catch(() => {});
       requested.current.clear();
       setThreads({});
       setEpoch((n) => n + 1);
@@ -222,6 +270,33 @@ export default function App() {
     setScreen("inbox");
     setMobileView("chat");
   }, []);
+
+  const sendFriendRequest = useCallback(
+    async (targetId) => {
+      const result = await sendFriendRequestApi(targetId);
+      await refreshSocial();
+      return result;
+    },
+    [refreshSocial],
+  );
+
+  const acceptFriendRequest = useCallback(
+    async (requestId) => {
+      const result = await acceptFriendRequestApi(requestId);
+      await refreshSocial();
+      return result;
+    },
+    [refreshSocial],
+  );
+
+  const removeFriendRequest = useCallback(
+    async (requestId) => {
+      const result = await removeFriendRequestApi(requestId);
+      await refreshSocial();
+      return result;
+    },
+    [refreshSocial],
+  );
 
   // the row only moves forward: an older send must not pull it back up the list
   const bumpConversation = useCallback(
@@ -348,7 +423,7 @@ export default function App() {
           <div className={`mobile-pane mobile-list ${mobileView === "list" ? "visible" : "hidden"}`}>
             <ConversationList
               conversations={ordered}
-              users={users}
+              users={friendUsers}
               me={me}
               onlineIds={onlineIds}
               activeId={active?._id ?? null}
@@ -366,6 +441,7 @@ export default function App() {
               messages={activeThread.items}
               loading={activeThread.loading}
               hasMore={activeThread.hasMore}
+              canSend={canSendToActive}
               onLoadOlder={loadOlder}
               onSend={sendMessage}
               onAddMembers={() => setModal("members")}
@@ -376,7 +452,11 @@ export default function App() {
           </div>
         </>
       ) : screen === "friends" ? (
-        <FriendsScreen requests={friendRequests} />
+        <FriendsScreen
+          requests={friendRequests}
+          onAccept={acceptFriendRequest}
+          onRemove={removeFriendRequest}
+        />
       ) : (
         <SettingsScreen user={user} onLogout={signOut} />
       )}
@@ -386,6 +466,10 @@ export default function App() {
         users={users}
         me={me}
         onlineIds={onlineIds}
+        friendIds={friendIds}
+        requests={friendRequests}
+        onSendFriendRequest={sendFriendRequest}
+        onAcceptFriendRequest={acceptFriendRequest}
         onCreate={startConversation}
         onAddMembers={addMembers}
         close={() => setModal(null)}

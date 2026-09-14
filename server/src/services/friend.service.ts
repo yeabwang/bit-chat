@@ -8,6 +8,36 @@ const USER_FIELDS = "name userName avatar";
 
 export const pairKeyFor = (a: string, b: string) => [a, b].sort().join(":");
 
+/**
+ * Guard every action that addresses specific people. One query covers the
+ * whole set, and accepted is part of the query so pending requests never grant
+ * messaging or group access.
+ */
+export const assertFriendsWithAllService = async (
+  userId: Types.ObjectId,
+  targetIds: Array<string | Types.ObjectId>,
+) => {
+  const me = String(userId);
+  const pairKeys = [
+    ...new Set(
+      targetIds
+        .map(String)
+        .filter((targetId) => targetId !== me)
+        .map((targetId) => pairKeyFor(me, targetId)),
+    ),
+  ];
+
+  if (pairKeys.length === 0) return;
+
+  const accepted = await FriendshipModel.countDocuments({
+    pairKey: { $in: pairKeys },
+    status: "accepted",
+  });
+
+  if (accepted !== pairKeys.length)
+    throw new BadRequestException("You can only message and add accepted friends");
+};
+
 const assertUserExists = async (id: string) => {
   const found = await UserModel.countDocuments({ _id: id });
   if (found !== 1) throw new NotFoundException("That user does not exist");

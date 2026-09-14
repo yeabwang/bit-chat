@@ -166,19 +166,31 @@ test("message:new bumps the row and counts unread only when not active", () => {
     content: "hi",
     createdAt: "2026-09-08T10:00:00.000Z",
   };
-  const [inactive] = applyMessageToList([dm], message, "c2");
+  const [inactive] = applyMessageToList([dm], message, "c2", "me");
   assert.equal(inactive.unreadCount, 1);
   assert.equal(inactive.lastMessage.content, "hi");
   assert.equal(inactive.lastActivityAt, message.createdAt);
 
-  const [active] = applyMessageToList([dm], message, "c1");
+  const [active] = applyMessageToList([dm], message, "c1", "me");
   assert.equal(active.unreadCount, 0);
+});
+
+test("the sender's socket echo never becomes their own unread message", () => {
+  const ownMessage = {
+    _id: "m10",
+    conversationId: "c1",
+    sender: me,
+    content: "sent from another tab",
+    createdAt: "2026-09-08T11:00:00.000Z",
+  };
+  const [row] = applyMessageToList([{ ...dm, unreadCount: 2 }], ownMessage, "c2", "me");
+  assert.equal(row.unreadCount, 2);
 });
 
 test("message:new with an older timestamp does not pull the row back", () => {
   const stale = { ...dm, lastActivityAt: "2026-09-09T10:00:00.000Z" };
   const message = { _id: "m1", conversationId: "c1", sender: jade, content: "old", createdAt: "2026-09-01T10:00:00.000Z" };
-  const [row] = applyMessageToList([stale], message, null);
+  const [row] = applyMessageToList([stale], message, null, "me");
   assert.equal(row.lastActivityAt, stale.lastActivityAt);
   assert.equal(row.lastMessage.content, "Meeting at 5");
 });

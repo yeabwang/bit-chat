@@ -3,6 +3,7 @@ import test, { mock } from "node:test";
 import assert from "node:assert/strict";
 import { Types } from "mongoose";
 import ConversationModel from "../src/models/conversation.model";
+import FriendshipModel from "../src/models/friendship.model";
 import MessageModel from "../src/models/message.model";
 import { getMessagesService, sendMessageService } from "../src/services/message.service";
 import {
@@ -20,9 +21,14 @@ const SENT_AT = new Date("2026-09-05T10:00:00.000Z");
 const conversationStub = () =>
   docStub({ _id: CONVERSATION_ID, participants: [ME, ALICE] });
 
-const membershipFound = (found: boolean) =>
+const membershipFound = (found: boolean, friends = true) => {
   mock.method(ConversationModel, "findOne", (() =>
     Promise.resolve(found ? conversationStub() : null)) as never);
+  if (found) {
+    mock.method(FriendshipModel, "countDocuments", (() =>
+      Promise.resolve(friends ? 1 : 0)) as never);
+  }
+};
 
 const createReturns = (id: string) =>
   mock.method(MessageModel, "create", (() =>
@@ -86,6 +92,18 @@ test("sending to a conversation you are not in is a 404 and writes nothing", asy
   await assert.rejects(
     sendMessageService(ME, CONVERSATION_ID, { content: "hello" }),
     (error: { statusCode?: number }) => error.statusCode === 404,
+  );
+  assert.equal(create.mock.callCount(), 0);
+});
+
+test("an old DM cannot be used after the friendship is removed", async (t) => {
+  t.after(() => mock.restoreAll());
+  membershipFound(true, false);
+  const create = createReturns("m1");
+
+  await assert.rejects(
+    sendMessageService(ME, CONVERSATION_ID, { content: "hello" }),
+    /only message and add accepted friends/,
   );
   assert.equal(create.mock.callCount(), 0);
 });

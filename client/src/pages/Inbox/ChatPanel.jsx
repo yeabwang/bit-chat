@@ -26,6 +26,7 @@ export default function ChatPanel({
   messages,
   loading,
   hasMore,
+  canSend = true,
   onLoadOlder,
   onSend,
   onAddMembers,
@@ -105,7 +106,7 @@ export default function ChatPanel({
 
   const submit = (event) => {
     event.preventDefault();
-    if (!trimmed) return;
+    if (!trimmed || !canSend) return;
     onSend({ content: trimmed, replyTo });
     setDraft("");
     setReplyTo(null);
@@ -283,19 +284,28 @@ export default function ChatPanel({
         )}
         <textarea
           value={draft}
+          disabled={!canSend}
           onChange={(event) => setDraft(event.target.value.slice(0, MAX_LENGTH))}
           onKeyDown={onKeyDown}
           maxLength={MAX_LENGTH}
           rows={1}
-          placeholder={`Message ${titleOf(conversation, me._id)}`}
+          placeholder={
+            canSend
+              ? `Message ${titleOf(conversation, me._id)}`
+              : "You need to be friends before you can send messages"
+          }
           aria-label="Write a message"
         />
         <div className="composer-tools">
-          <span className="composer-hint">Enter to send, Shift + Enter for a new line</span>
+          <span className="composer-hint">
+            {canSend
+              ? "Enter to send, Shift + Enter for a new line"
+              : "This direct message is read-only until the friendship is accepted"}
+          </span>
           {draft.length > MAX_LENGTH - 200 && (
             <span className="composer-count">{MAX_LENGTH - draft.length}</span>
           )}
-          <button type="submit" disabled={!trimmed}>Send</button>
+          <button type="submit" disabled={!trimmed || !canSend}>Send</button>
         </div>
       </form>
     </section>

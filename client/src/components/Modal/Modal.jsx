@@ -15,6 +15,10 @@ export default function Modal({
   users = [],
   me,
   onlineIds,
+  friendIds = new Set(),
+  requests = { incoming: [], outgoing: [] },
+  onSendFriendRequest,
+  onAcceptFriendRequest,
   onCreate,
   onAddMembers,
   close,
@@ -23,6 +27,7 @@ export default function Modal({
   const [picked, setPicked] = useState([]);
   const [groupName, setGroupName] = useState("");
   const [pending, setPending] = useState(false);
+  const [actingId, setActingId] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -30,8 +35,13 @@ export default function Modal({
     setPicked([]);
     setGroupName("");
     setPending(false);
+    setActingId(null);
     setError(null);
   }, [type]);
+
+  useEffect(() => {
+    setPicked((all) => all.filter((id) => friendIds.has(id)));
+  }, [friendIds]);
 
   useEffect(() => {
     const onKey = (event) => event.key === "Escape" && close();
@@ -47,8 +57,30 @@ export default function Modal({
     .filter((u) => (type === "members" ? !existing.has(u._id) : true))
     .filter((u) => `${u.name} ${u.userName}`.toLowerCase().includes(query.trim().toLowerCase()));
 
+  const incomingByUser = new Map(
+    (requests.incoming ?? []).map((friendRequest) => [friendRequest.user._id, friendRequest]),
+  );
+  const outgoingByUser = new Map(
+    (requests.outgoing ?? []).map((friendRequest) => [friendRequest.user._id, friendRequest]),
+  );
+
   const toggle = (id) =>
+    friendIds.has(id) &&
     setPicked((all) => (all.includes(id) ? all.filter((x) => x !== id) : [...all, id]));
+
+  const changeFriendship = async (user, incomingRequest) => {
+    if (actingId) return;
+    setActingId(user._id);
+    setError(null);
+    try {
+      if (incomingRequest) await onAcceptFriendRequest(incomingRequest._id);
+      else await onSendFriendRequest(user._id);
+    } catch (failure) {
+      setError(errorMessage(failure, "Could not update the friend request"));
+    } finally {
+      setActingId(null);
+    }
+  };
 
   // a two-person thread is a DM, so the server rejects a group of fewer than two others
   const isGroup = picked.length >= 2;
@@ -108,16 +140,40 @@ export default function Modal({
         <ul className="member-list">
           {pool.map((user) => {
             const on = picked.includes(user._id);
+            const isFriend = friendIds.has(user._id);
+            const incomingRequest = incomingByUser.get(user._id);
+            const outgoingRequest = outgoingByUser.get(user._id);
             return (
               <li key={user._id}>
-                <button className={`member-row ${on ? "picked" : ""}`} onClick={() => toggle(user._id)} aria-pressed={on}>
-                  <Avatar src={user.avatar} size={40} online={onlineIds?.has(user._id)} />
-                  <span className="member-copy">
-                    <strong>{user.name}</strong>
-                    <span>@{user.userName}</span>
-                  </span>
-                  <span className="check-circle" aria-hidden="true">{on ? "✓" : ""}</span>
-                </button>
+                <div className={`member-row ${on ? "picked" : ""}`}>
+                  <button
+                    className="member-person"
+                    disabled={!isFriend}
+                    onClick={() => toggle(user._id)}
+                    aria-pressed={isFriend ? on : undefined}
+                  >
+                    <Avatar src={user.avatar} size={40} online={onlineIds?.has(user._id)} />
+                    <span className="member-copy">
+                      <strong>{user.name}</strong>
+                      <span>@{user.userName}</span>
+                    </span>
+                  </button>
+                  {isFriend ? (
+                    <span className="check-circle" aria-hidden="true">{on ? "✓" : ""}</span>
+                  ) : outgoingRequest ? (
+                    <span className="friend-request-status">Request sent</span>
+                  ) : (
+                    <button
+                      className="friend-request-action"
+                      disabled={Boolean(actingId)}
+                      onClick={() => changeFriendship(user, incomingRequest)}
+                    >
+                      {actingId === user._id
+                        ? incomingRequest ? "Accepting…" : "Sending…"
+                        : incomingRequest ? "Accept" : "Add friend"}
+                    </button>
+                  )}
+                </div>
               </li>
             );
           })}

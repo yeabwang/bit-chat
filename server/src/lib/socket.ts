@@ -14,6 +14,8 @@ export const SOCKET_EVENTS = {
   CONVERSATION_NEW: "conversation:new",
   CONVERSATION_UPDATED: "conversation:updated",
   CONVERSATION_REMOVED: "conversation:removed",
+  CONVERSATION_READ: "conversation:read",
+  FRIENDSHIP_CHANGED: "friendship:changed",
 } as const;
 
 export const userRoom = (userId: string) => `user:${userId}`;

@@ -3,6 +3,7 @@ import test, { mock } from "node:test";
 import assert from "node:assert/strict";
 import { Types } from "mongoose";
 import ConversationModel from "../src/models/conversation.model";
+import FriendshipModel from "../src/models/friendship.model";
 import MessageModel from "../src/models/message.model";
 import UserModel from "../src/models/user.model";
 import {
@@ -22,9 +23,13 @@ const ALICE = "507f1f77bcf86cd799439012";
 const BOB = "507f1f77bcf86cd799439013";
 const CONVERSATION_ID = "507f1f77bcf86cd7994390ff";
 
-const allUsersExist = () =>
+const allUsersExist = (friends = true) => {
   mock.method(UserModel, "countDocuments", ((query: { _id: { $in: string[] } }) =>
     Promise.resolve(query._id.$in.length)) as never);
+  mock.method(FriendshipModel, "countDocuments", ((query: {
+    pairKey: { $in: string[] };
+  }) => Promise.resolve(friends ? query.pairKey.$in.length : 0)) as never);
+};
 
 // the conditional update either matches, or returns null and the service goes
 // looking for which precondition failed
@@ -157,6 +162,18 @@ test("adding a user who does not exist is refused before the update", async (t) 
   await assert.rejects(
     addMembersService(ME, CONVERSATION_ID, { members: [ALICE] }),
     (error: { statusCode?: number }) => error.statusCode === 404,
+  );
+  assert.equal(update.mock.callCount(), 0);
+});
+
+test("a group member can only add accepted friends", async (t) => {
+  t.after(() => mock.restoreAll());
+  allUsersExist(false);
+  const update = updateReturns(docStub({ _id: CONVERSATION_ID }));
+
+  await assert.rejects(
+    addMembersService(ME, CONVERSATION_ID, { members: [ALICE] }),
+    /only message and add accepted friends/,
   );
   assert.equal(update.mock.callCount(), 0);
 });

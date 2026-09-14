@@ -70,6 +70,9 @@ export const getUserConversationsController = asyncHandler(
 export const markReadController = asyncHandler(async (req: Request, res: Response) => {
   const { id } = conversationIdSchema.parse(req.params);
   await markReadService(req.user!._id, id);
+  emitToUsers([String(req.user!._id)], SOCKET_EVENTS.CONVERSATION_READ, {
+    conversationId: id,
+  });
 
   return res.status(HTTPSTATUS.OK).json({ message: "Conversation marked read" });
 });

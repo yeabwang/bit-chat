@@ -1,16 +1,27 @@
 import { useState } from "react";
 import Avatar from "../../components/Avatar/Avatar";
+import { errorMessage } from "../../api/client";
 import "./friends.css";
 
-// No endpoints behind this yet;
-export default function FriendsScreen({ requests }) {
+export default function FriendsScreen({ requests, onAccept, onRemove }) {
   const [tab, setTab] = useState("incoming");
-  const [resolved, setResolved] = useState({});
+  const [pendingId, setPendingId] = useState(null);
+  const [error, setError] = useState(null);
 
   const rows = requests[tab] ?? [];
-  const pending = rows.filter((row) => !resolved[row._id]);
 
-  const resolve = (id, outcome) => setResolved((all) => ({ ...all, [id]: outcome }));
+  const act = async (id, action) => {
+    if (pendingId) return;
+    setPendingId(id);
+    setError(null);
+    try {
+      await action(id);
+    } catch (failure) {
+      setError(errorMessage(failure, "Could not update the friend request"));
+    } finally {
+      setPendingId(null);
+    }
+  };
 
   return (
     <section className="center-screen">
@@ -19,6 +30,8 @@ export default function FriendsScreen({ requests }) {
           <h1>Friend requests</h1>
           <p>People who want to connect with you.</p>
         </header>
+
+        {error && <p className="friends-error" role="alert">{error}</p>}
 
         <div className="tabs" role="tablist">
           {["incoming", "outgoing"].map((key) => (
@@ -36,7 +49,7 @@ export default function FriendsScreen({ requests }) {
         </div>
 
         <ul className="request-list">
-          {pending.map((row) => (
+          {rows.map((row) => (
             <li className="request-row" key={row._id}>
               <Avatar src={row.user.avatar} size={44} />
               <div className="request-copy">
@@ -45,25 +58,37 @@ export default function FriendsScreen({ requests }) {
               </div>
               {tab === "incoming" ? (
                 <div className="request-actions">
-                  <button className="accept" onClick={() => resolve(row._id, "accepted")}>
-                    Accept
+                  <button
+                    className="accept"
+                    disabled={Boolean(pendingId)}
+                    onClick={() => act(row._id, onAccept)}
+                  >
+                    {pendingId === row._id ? "Accepting…" : "Accept"}
                   </button>
-                  <button className="decline" onClick={() => resolve(row._id, "declined")}>
+                  <button
+                    className="decline"
+                    disabled={Boolean(pendingId)}
+                    onClick={() => act(row._id, onRemove)}
+                  >
                     Decline
                   </button>
                 </div>
               ) : (
                 <div className="request-actions">
                   <span className="pending-tag">Pending</span>
-                  <button className="decline" onClick={() => resolve(row._id, "withdrawn")}>
-                    Withdraw
+                  <button
+                    className="decline"
+                    disabled={Boolean(pendingId)}
+                    onClick={() => act(row._id, onRemove)}
+                  >
+                    {pendingId === row._id ? "Withdrawing…" : "Withdraw"}
                   </button>
                 </div>
               )}
             </li>
           ))}
 
-          {pending.length === 0 && (
+          {rows.length === 0 && (
             <li className="request-empty">
               {tab === "incoming" ? "No incoming requests right now." : "You have no pending invites."}
             </li>

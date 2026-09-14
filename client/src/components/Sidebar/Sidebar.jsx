@@ -33,7 +33,15 @@ export default function Sidebar({ screen, setScreen, counts = {}, onMobileClose,
               <Icon name={item.icon} />
               <span className="side-label">{item.label}</span>
               {count > 0 && (
-                <b aria-label={`${count} unread`}>{count > 99 ? "99+" : count}</b>
+                <b
+                  aria-label={
+                    item.id === "friends"
+                      ? `${count} incoming friend request${count === 1 ? "" : "s"}`
+                      : `${count} unread message${count === 1 ? "" : "s"}`
+                  }
+                >
+                  {count > 99 ? "99+" : count}
+                </b>
               )}
             </button>
           );

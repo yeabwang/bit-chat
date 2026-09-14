@@ -6,6 +6,7 @@ import FriendshipModel from "../src/models/friendship.model";
 import UserModel from "../src/models/user.model";
 import {
   acceptFriendRequestService,
+  assertFriendsWithAllService,
   getPendingRequestsService,
   pairKeyFor,
   removePendingRequestService,
@@ -43,6 +44,22 @@ test("a request needs a valid user id", () => {
 test("the pair key is the same whichever way round it is built", () => {
   // this is the whole reason two people cannot end up with two rows
   assert.equal(pairKeyFor(ALICE, String(ME)), pairKeyFor(String(ME), ALICE));
+});
+
+test("friend-only actions reject any target without an accepted friendship", async (t) => {
+  t.after(() => mock.restoreAll());
+  const count = mock.method(FriendshipModel, "countDocuments", (() =>
+    Promise.resolve(0)) as never);
+
+  await assert.rejects(
+    assertFriendsWithAllService(ME, [ALICE]),
+    /only message and add accepted friends/,
+  );
+
+  assert.deepEqual(callArgs(count)[0], {
+    pairKey: { $in: [pairKeyFor(String(ME), ALICE)] },
+    status: "accepted",
+  });
 });
 
 test("you cannot friend yourself", async () => {

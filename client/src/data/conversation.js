@@ -160,17 +160,21 @@ export function replaceConversation(conversations, conversation) {
 
 /**
  * message:new for the sidebar. Bumps preview and activity, and counts unread
- * unless the thread is open on screen. Only moves forward: an echo of an
- * older send must not pull the row back up the list.
+ * unless the thread is open on screen or the message is our own socket echo.
+ * Only moves forward: an echo of an older send must not pull the row back up
+ * the list.
  */
-export function applyMessageToList(conversations, message, activeId) {
+export function applyMessageToList(conversations, message, activeId, meId) {
   return conversations.map((c) => {
     if (c._id !== message.conversationId) return c;
     const forward = new Date(message.createdAt) >= new Date(c.lastActivityAt ?? 0);
     return {
       ...c,
       ...(forward ? { lastMessage: message, lastActivityAt: message.createdAt } : {}),
-      unreadCount: c._id === activeId ? 0 : (c.unreadCount ?? 0) + 1,
+      unreadCount:
+        c._id === activeId || message.sender?._id === meId
+          ? (c._id === activeId ? 0 : (c.unreadCount ?? 0))
+          : (c.unreadCount ?? 0) + 1,
     };
   });
 }
