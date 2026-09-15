@@ -129,6 +129,39 @@ export function mergeOlderPage(thread = EMPTY_THREAD, page) {
   };
 }
 
+/** Add one reader to every message they had reached when the receipt arrived. */
+export function applyReadReceipt(thread = EMPTY_THREAD, readerId, readAt) {
+  const reachedAt = new Date(readAt).getTime();
+  if (!readerId || Number.isNaN(reachedAt)) return thread;
+
+  return {
+    ...thread,
+    items: thread.items.map((message) => {
+      const senderId = message.sender?._id;
+      const existing = (message.readBy ?? []).map((id) => String(id?._id ?? id));
+      if (
+        senderId === readerId ||
+        new Date(message.createdAt).getTime() > reachedAt ||
+        existing.includes(readerId)
+      )
+        return message;
+      return { ...message, readBy: [...existing, readerId] };
+    }),
+  };
+}
+
+/** A group message is read only after every other participant has opened it. */
+export function isReadByAll(message, conversation) {
+  const senderId = message?.sender?._id;
+  const recipients = (conversation?.participants ?? [])
+    .map((participant) => participant._id)
+    .filter((id) => id !== senderId);
+  const readers = new Set(
+    (message?.readBy ?? []).map((id) => String(id?._id ?? id)),
+  );
+  return recipients.length > 0 && recipients.every((id) => readers.has(id));
+}
+
 /**
  * Socket reducers. Each takes the current list and returns the next one; the
  * caller decides what "active" means. Kept pure so node --test covers them.
@@ -160,17 +193,21 @@ export function replaceConversation(conversations, conversation) {
 
 /**
  * message:new for the sidebar. Bumps preview and activity, and counts unread
- * unless the thread is open on screen. Only moves forward: an echo of an
- * older send must not pull the row back up the list.
+ * unless the thread is open on screen or the message is our own socket echo.
+ * Only moves forward: an echo of an older send must not pull the row back up
+ * the list.
  */
-export function applyMessageToList(conversations, message, activeId) {
+export function applyMessageToList(conversations, message, activeId, meId) {
   return conversations.map((c) => {
     if (c._id !== message.conversationId) return c;
     const forward = new Date(message.createdAt) >= new Date(c.lastActivityAt ?? 0);
     return {
       ...c,
       ...(forward ? { lastMessage: message, lastActivityAt: message.createdAt } : {}),
-      unreadCount: c._id === activeId ? 0 : (c.unreadCount ?? 0) + 1,
+      unreadCount:
+        c._id === activeId || message.sender?._id === meId
+          ? (c._id === activeId ? 0 : (c.unreadCount ?? 0))
+          : (c.unreadCount ?? 0) + 1,
     };
   });
 }

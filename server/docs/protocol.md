@@ -2,12 +2,13 @@
 
 Two transports, one session.
 
-| Transport | Carries                                             |
-| --------- | --------------------------------------------------- |
-| HTTP      | every read and every**write**                       |
-| WebSocket | **fanout only** - telling clients what just changed |
+| Transport | Carries                                    |
+| --------- | ------------------------------------------ |
+| HTTP      | every read and every**write**              |
+| WebSocket | realtime fanout and ephemeral typing state |
 
-Nothing is written over the socket.
+Durable writes still use HTTP. Typing state is the only client-originated
+socket traffic and is never stored.
 
 ---
 
@@ -36,21 +37,27 @@ On connect, the server puts the socket into:
 
 ### Server to client
 
-| Event                  | Sent to                    | Payload                 | When                                                 |
-| ---------------------- | -------------------------- | ----------------------- | ---------------------------------------------------- |
-| `presence:sync`        | the connecting socket      | `{ userIds: string[] }` | immediately on connect - who is online right now     |
-| `presence:online`      | everyone else              | `{ userId }`            | a user's**first** socket connects                    |
-| `presence:offline`     | everyone else              | `{ userId }`            | a user's**last** socket disconnects                  |
-| `message:new`          | `conversation:<id>`        | `{ message }`           | a message was sent                                   |
-| `conversation:new`     | `user:<id>` of each member | `{ conversation }`      | a conversation was created, or you were added to one |
-| `conversation:updated` | `conversation:<id>`        | `{ conversation }`      | renamed, or the member list changed                  |
-| `conversation:removed` | `user:<id>` of the leaver  | `{ conversationId }`    | you left                                             |
+| Event                  | Sent to                    | Payload                                | When                                                 |
+| ---------------------- | -------------------------- | -------------------------------------- | ---------------------------------------------------- |
+| `presence:sync`        | the connecting socket      | `{ userIds: string[] }`                | immediately on connect - who is online right now     |
+| `presence:online`      | everyone else              | `{ userId }`                           | a user's**first** socket connects                    |
+| `presence:offline`     | everyone else              | `{ userId }`                           | a user's**last** socket disconnects                  |
+| `message:new`          | `conversation:<id>`        | `{ message }`                          | a message was sent                                   |
+| `conversation:new`     | `user:<id>` of each member | `{ conversation }`                     | a conversation was created, or you were added to one |
+| `conversation:updated` | `conversation:<id>`        | `{ conversation }`                     | renamed, or the member list changed                  |
+| `conversation:removed` | `user:<id>` of the leaver  | `{ conversationId }`                   | you left                                             |
+| `conversation:read`    | `conversation:<id>`        | `{ conversationId, readerId, readAt }` | a participant read through `readAt`                  |
+| `friendship:changed`   | both users                 | `{}`                                   | a request or friendship changed                      |
+| `typing:start`         | other conversation members | `{ conversationId, userId }`           | a member began typing                                |
+| `typing:stop`          | other conversation members | `{ conversationId, userId }`           | a member stopped typing                              |
 
 `message` and `conversation` are exactly the objects the REST endpoints return - see [`messages`](./messages.md) and [`conversations`](./conversations.md).
 
 ### Client to server
 
-**None.** The client emits nothing. Every action is an HTTP request, and the resulting event arrives over the socket.
+The client may emit `typing:start` or `typing:stop` with `{ conversationId }`.
+The server validates the id and confirms membership before forwarding either
+event. All durable actions remain HTTP requests.
 
 | To do this          | Call this                                  | You will then receive  |
 | ------------------- | ------------------------------------------ | ---------------------- |
@@ -59,6 +66,7 @@ On connect, the server puts the socket into:
 | Add members         | `POST /api/conversations/:id/members`      | `conversation:updated` |
 | Rename a group      | `PATCH /api/conversations/:id`             | `conversation:updated` |
 | Leave a group       | `DELETE /api/conversations/:id/members/me` | `conversation:removed` |
+| Mark a thread read  | `POST /api/conversations/:id/read`         | `conversation:read`    |
 
 ---
 
@@ -104,14 +112,16 @@ Step 1 needs the de-duplication because **the sender's own sockets receive `mess
 
 ### Handling the rest
 
-| Event                  | Client does                                                                                          |
-| ---------------------- | ---------------------------------------------------------------------------------------------------- |
-| `presence:sync`        | replace`onlineUserIds` wholesale                                                                     |
-| `presence:online`      | add the id                                                                                           |
-| `presence:offline`     | remove the id                                                                                        |
-| `conversation:new`     | insert into`conversations`                                                                           |
-| `conversation:updated` | replace that conversation in place; do**not** reorder                                                |
-| `conversation:removed` | drop it from`conversations` and from `messagesByConversation`; if it was active, clear the selection |
+| Event                          | Client does                                                                                          |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `presence:sync`                | replace`onlineUserIds` wholesale                                                                     |
+| `presence:online`              | add the id                                                                                           |
+| `presence:offline`             | remove the id                                                                                        |
+| `conversation:new`             | insert into`conversations`                                                                           |
+| `conversation:updated`         | replace that conversation in place; do**not** reorder                                                |
+| `conversation:removed`         | drop it from`conversations` and from `messagesByConversation`; if it was active, clear the selection |
+| `conversation:read`            | clear the reader's unread count and add `readerId` to reached messages                               |
+| `typing:start` / `typing:stop` | add or remove `userId` from the conversation's temporary typing set                                  |
 
 `conversation:updated` must not reorder the list. A rename is not activity, and the server does not move `lastActivityAt` for one.
 

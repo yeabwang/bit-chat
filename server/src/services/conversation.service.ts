@@ -3,6 +3,7 @@ import ConversationModel, { ConversationDocument } from "../models/conversation.
 import MessageModel from "../models/message.model";
 import UserModel from "../models/user.model";
 import { BadRequestException, NotFoundException } from "../utils/app-error";
+import { assertFriendsWithAllService } from "./friend.service";
 import {
   AddMembersSchemaType,
   CreateConversationSchemaType,
@@ -49,6 +50,7 @@ export const createConversationService = async (
     if (members.length < 2)
       throw new BadRequestException("A group needs at least two other members");
     await assertUsersExist(members);
+    await assertFriendsWithAllService(userId, members);
 
     const conversation = await ConversationModel.create({
       participants: [me, ...members],
@@ -66,6 +68,7 @@ export const createConversationService = async (
   if (body.participantId === me)
     throw new BadRequestException("You cannot start a conversation with yourself");
   await assertUsersExist([body.participantId]);
+  await assertFriendsWithAllService(userId, [body.participantId]);
 
   const dmKey = dmKeyFor(me, body.participantId);
   const result = await ConversationModel.findOneAndUpdate(
@@ -120,12 +123,25 @@ export const getUserConversationsService = async (userId: Types.ObjectId) => {
 };
 
 export const markReadService = async (userId: Types.ObjectId, conversationId: string) => {
+  const readAt = new Date();
   const result = await ConversationModel.updateOne(
     { _id: conversationId, participants: userId },
-    { $set: { [`lastReadAt.${userId}`]: new Date() } },
+    { $set: { [`lastReadAt.${userId}`]: readAt } },
   );
   if (result.matchedCount === 0)
     throw new NotFoundException("Conversation not found or you are not a participant");
+
+  await MessageModel.updateMany(
+    {
+      conversationId,
+      sender: { $ne: userId },
+      createdAt: { $lte: readAt },
+      readBy: { $ne: userId },
+    },
+    { $addToSet: { readBy: userId } },
+  );
+
+  return readAt;
 };
 
 export const getUserConversationIdsService = async (userId: string) => {
@@ -160,6 +176,7 @@ export const addMembersService = async (
 ) => {
   const members = [...new Set(body.members)];
   await assertUsersExist(members);
+  await assertFriendsWithAllService(userId, members);
 
   const conversation = await ConversationModel.findOneAndUpdate(
     {

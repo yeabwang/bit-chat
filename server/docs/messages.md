@@ -26,18 +26,20 @@ Requests and responses are `application/json`. Both routes sit behind the sessio
   },
   "content": "Meeting at 5",
   "replyTo": null,
+  "readBy": [],
   "createdAt": "2026-09-05T10:00:00.000Z",
   "updatedAt": "2026-09-05T10:00:00.000Z",
   "__v": 0
 }
 ```
 
-| Field            | Notes                                                                 |
-| ---------------- | --------------------------------------------------------------------- |
-| `conversationId` | the thread this belongs to                                            |
-| `sender`         | populated with`name`, `userName`, `avatar`                            |
-| `content`        | 1-4000 characters, trimmed. Always present                            |
-| `replyTo`        | `null`, or the quoted message with its `content` and its own `sender` |
+| Field            | Notes                                                                  |
+| ---------------- | ---------------------------------------------------------------------- |
+| `conversationId` | the thread this belongs to                                             |
+| `sender`         | populated with`name`, `userName`, `avatar`                             |
+| `content`        | 1-4000 characters, trimmed. Always present                             |
+| `replyTo`        | `null`, or the quoted message with its `content` and its own `sender`  |
+| `readBy`         | participant ids that have opened the conversation through this message |
 
 ---
 

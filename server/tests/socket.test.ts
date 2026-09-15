@@ -49,6 +49,10 @@ const stubDatabase = (members: string[] = [ALICE, BOB]) => {
     queryStub(
       members.includes(filter.participants) ? [{ _id: CONVERSATION_ID }] : [],
     )) as never);
+  mock.method(ConversationModel, "exists", ((filter: { participants: string }) =>
+    Promise.resolve(
+      members.includes(String(filter.participants)) ? { _id: CONVERSATION_ID } : null,
+    )) as never);
 };
 
 type Harness = {
@@ -214,6 +218,45 @@ test("the sender's own sockets receive the message too", async (t) => {
   await onTab2;
 });
 
+test("typing state reaches other members but not the sender", async (t) => {
+  const harness = await startServer();
+  stubDatabase();
+  t.after(() => stopServer(harness));
+
+  const alice = connectAs(harness, ALICE);
+  await once(alice, SOCKET_EVENTS.PRESENCE_SYNC);
+  const bob = connectAs(harness, BOB);
+  await once(bob, SOCKET_EVENTS.PRESENCE_SYNC);
+
+  const bobSeesTyping = once<{ conversationId: string; userId: string }>(
+    bob,
+    SOCKET_EVENTS.TYPING_START,
+  );
+  const aliceStaysQuiet = silentFor(alice, SOCKET_EVENTS.TYPING_START);
+  alice.emit(SOCKET_EVENTS.TYPING_START, { conversationId: CONVERSATION_ID });
+
+  assert.deepEqual(await bobSeesTyping, {
+    conversationId: CONVERSATION_ID,
+    userId: ALICE,
+  });
+  assert.equal(await aliceStaysQuiet, true);
+});
+
+test("a non-member cannot broadcast typing into a conversation", async (t) => {
+  const harness = await startServer();
+  stubDatabase([ALICE, BOB]);
+  t.after(() => stopServer(harness));
+
+  const alice = connectAs(harness, ALICE);
+  await once(alice, SOCKET_EVENTS.PRESENCE_SYNC);
+  const carol = connectAs(harness, CAROL);
+  await once(carol, SOCKET_EVENTS.PRESENCE_SYNC);
+
+  const aliceStaysQuiet = silentFor(alice, SOCKET_EVENTS.TYPING_START, 400);
+  carol.emit(SOCKET_EVENTS.TYPING_START, { conversationId: CONVERSATION_ID });
+  assert.equal(await aliceStaysQuiet, true);
+});
+
 test("a user who leaves a group stops receiving its messages immediately", async (t) => {
   const harness = await startServer();
   stubDatabase();
@@ -293,8 +336,8 @@ test("a non participant cannot talk their way into the room", async (t) => {
   const carol = connectAs(harness, CAROL);
   await once(carol, SOCKET_EVENTS.PRESENCE_SYNC);
 
-  // there are no client-to-server events at all, so none of these reach a
-  // handler. Room membership is the server's to decide, never the client's.
+  // None of these names has a handler. Room membership is the server's to
+  // decide, never the client's.
   carol.emit("conversation:join", CONVERSATION_ID);
   carol.emit("chat:join", CONVERSATION_ID);
   carol.emit("join", `conversation:${CONVERSATION_ID}`);

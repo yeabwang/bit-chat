@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { Types } from "mongoose";
 import type { Request, RequestHandler, Response } from "express";
 import ConversationModel from "../src/models/conversation.model";
+import FriendshipModel from "../src/models/friendship.model";
 import UserModel from "../src/models/user.model";
 import {
   createConversationController,
@@ -49,9 +50,13 @@ const call = async (
   return captured;
 };
 
-const allUsersExist = () =>
+const allUsersExist = () => {
   mock.method(UserModel, "countDocuments", ((query: { _id: { $in: string[] } }) =>
     Promise.resolve(query._id.$in.length)) as never);
+  mock.method(FriendshipModel, "countDocuments", ((query: {
+    pairKey: { $in: string[] };
+  }) => Promise.resolve(query.pairKey.$in.length)) as never);
+};
 
 const upsertReturns = (updatedExisting: boolean) =>
   mock.method(ConversationModel, "findOneAndUpdate", (() =>

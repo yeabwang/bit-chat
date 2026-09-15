@@ -5,6 +5,7 @@ import { COOKIE_NAME, verifyJwtAuthToken } from "../utils/cookie";
 import { findByIdUserService } from "../services/user.service";
 import { getUserConversationIdsService } from "../services/conversation.service";
 import { addSocket, onlineUserIds, removeSocket } from "./presence";
+import ConversationModel from "../models/conversation.model";
 
 export const SOCKET_EVENTS = {
   PRESENCE_SYNC: "presence:sync",
@@ -14,6 +15,10 @@ export const SOCKET_EVENTS = {
   CONVERSATION_NEW: "conversation:new",
   CONVERSATION_UPDATED: "conversation:updated",
   CONVERSATION_REMOVED: "conversation:removed",
+  CONVERSATION_READ: "conversation:read",
+  FRIENDSHIP_CHANGED: "friendship:changed",
+  TYPING_START: "typing:start",
+  TYPING_STOP: "typing:stop",
 } as const;
 
 export const userRoom = (userId: string) => `user:${userId}`;
@@ -84,6 +89,37 @@ export const initializeSocket = (httpServer: HTTPServer) => {
     } catch (error) {
       console.error("Could not join conversation rooms", error);
     }
+
+    const forwardTyping = async (
+      event: typeof SOCKET_EVENTS.TYPING_START | typeof SOCKET_EVENTS.TYPING_STOP,
+      payload: { conversationId?: unknown } | undefined,
+    ) => {
+      const conversationId = payload?.conversationId;
+      if (typeof conversationId !== "string" || !/^[0-9a-f]{24}$/i.test(conversationId))
+        return;
+
+      try {
+        const isParticipant = await ConversationModel.exists({
+          _id: conversationId,
+          participants: userId,
+        });
+        if (!isParticipant) return;
+
+        socket.to(conversationRoom(conversationId)).emit(event, {
+          conversationId,
+          userId,
+        });
+      } catch (error) {
+        console.error("Could not forward typing state", error);
+      }
+    };
+
+    socket.on(SOCKET_EVENTS.TYPING_START, (payload) => {
+      void forwardTyping(SOCKET_EVENTS.TYPING_START, payload);
+    });
+    socket.on(SOCKET_EVENTS.TYPING_STOP, (payload) => {
+      void forwardTyping(SOCKET_EVENTS.TYPING_STOP, payload);
+    });
 
     socket.on("disconnect", () => {
       if (removeSocket(userId, socket.id)) {

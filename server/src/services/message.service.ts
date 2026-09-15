@@ -6,6 +6,7 @@ import {
   MessageHistoryQueryType,
   SendMessageSchemaType,
 } from "../validators/message.validator";
+import { assertFriendsWithAllService } from "./friend.service";
 
 const SENDER_FIELDS = "name userName avatar";
 
@@ -29,6 +30,16 @@ export const sendMessageService = async (
   });
   if (!conversation)
     throw new NotFoundException("Conversation not found or you are not a participant");
+
+  // Groups are permissioned by membership. Direct messages additionally need
+  // a friendship that is still accepted, including conversations created
+  // before the friend-only rule existed.
+  if (!conversation.isGroup) {
+    const otherParticipants = conversation.participants.filter(
+      (participant) => String(participant) !== String(userId),
+    );
+    await assertFriendsWithAllService(userId, otherParticipants);
+  }
 
   if (body.replyToId) {
     const replyTo = await MessageModel.exists({

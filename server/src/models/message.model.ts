@@ -8,6 +8,9 @@ export interface MessageDocument extends Document {
 
   replyTo?: mongoose.Types.ObjectId | null;
 
+  // Users who have opened the conversation at or after this message.
+  readBy: mongoose.Types.ObjectId[];
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -38,6 +41,13 @@ const messageSchema = new Schema<MessageDocument>(
       ref: "Message",
       default: null,
     },
+
+    readBy: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
   },
   {
     timestamps: true,

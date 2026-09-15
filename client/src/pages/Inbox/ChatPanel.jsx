@@ -12,6 +12,7 @@ import {
   canManage,
   timeOf,
   dayOf,
+  isReadByAll,
   startsRun,
 } from "../../data/conversation";
 import "./inbox.css";
@@ -26,8 +27,11 @@ export default function ChatPanel({
   messages,
   loading,
   hasMore,
+  canSend = true,
+  typingUsers = [],
   onLoadOlder,
   onSend,
+  onTypingChange,
   onAddMembers,
   onRename,
   onLeave,
@@ -41,12 +45,14 @@ export default function ChatPanel({
   const areaRef = useRef(null);
 
   const anchorRef = useRef(null);
+  const typingTimerRef = useRef(null);
+  const typingSentRef = useRef(false);
 
   const oldestId = messages[0]?._id;
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
-  }, [conversation?._id, messages.at(-1)?._id]);
+  }, [conversation?._id, messages.at(-1)?._id, typingUsers.length]);
 
   useEffect(() => {
     setMenuOpen(false);
@@ -55,6 +61,17 @@ export default function ChatPanel({
     setError(null);
     anchorRef.current = null;
   }, [conversation?._id]);
+
+  useEffect(() => {
+    const conversationId = conversation?._id;
+    return () => {
+      if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
+      if (typingSentRef.current && conversationId) {
+        onTypingChange?.(conversationId, false);
+      }
+      typingSentRef.current = false;
+    };
+  }, [conversation?._id, onTypingChange]);
 
   const pageBack = () => {
     const area = areaRef.current;
@@ -105,11 +122,47 @@ export default function ChatPanel({
 
   const submit = (event) => {
     event.preventDefault();
-    if (!trimmed) return;
+    if (!trimmed || !canSend) return;
     onSend({ content: trimmed, replyTo });
+    if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = null;
+    typingSentRef.current = false;
+    onTypingChange?.(conversation._id, false);
     setDraft("");
     setReplyTo(null);
   };
+
+  const updateDraft = (value) => {
+    const next = value.slice(0, MAX_LENGTH);
+    setDraft(next);
+    if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
+
+    if (!next.trim()) {
+      if (typingSentRef.current) onTypingChange?.(conversation._id, false);
+      typingSentRef.current = false;
+      typingTimerRef.current = null;
+      return;
+    }
+
+    if (!typingSentRef.current) {
+      onTypingChange?.(conversation._id, true);
+      typingSentRef.current = true;
+    }
+    typingTimerRef.current = window.setTimeout(() => {
+      typingSentRef.current = false;
+      typingTimerRef.current = null;
+      onTypingChange?.(conversation._id, false);
+    }, 1200);
+  };
+
+  const typingLabel =
+    typingUsers.length === 1
+      ? `${typingUsers[0].name} is typing`
+      : typingUsers.length === 2
+        ? `${typingUsers[0].name} and ${typingUsers[1].name} are typing`
+        : typingUsers.length > 2
+          ? `${typingUsers[0].name} and ${typingUsers.length - 1} others are typing`
+          : "";
 
   const onKeyDown = (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -215,6 +268,7 @@ export default function ChatPanel({
           const mine = message.sender?._id === me._id;
           const newRun = startsRun(message, previous);
           const newDay = !previous || dayOf(previous.createdAt) !== dayOf(message.createdAt);
+          const read = mine && isReadByAll(message, conversation);
 
           return (
             <Fragment key={message._id}>
@@ -245,6 +299,15 @@ export default function ChatPanel({
                     )}
                     {message.content}
                   </div>
+                  {mine && !message.pending && !message.failed && (
+                    <span
+                      className={`message-receipt ${read ? "read" : ""}`}
+                      aria-label={read ? "Read" : "Delivered"}
+                      title={read ? "Read" : "Delivered"}
+                    >
+                      {read ? "✓✓" : "✓"}
+                    </span>
+                  )}
                   {!message.pending && !message.failed && (
                     <button
                       type="button"
@@ -269,6 +332,31 @@ export default function ChatPanel({
             No messages yet. Say hello to {titleOf(conversation, me._id)}.
           </p>
         )}
+        {typingUsers.length > 0 && (
+          <div
+            className="message typing-message run-start"
+            role="status"
+            aria-live="polite"
+            aria-label={`${typingLabel}…`}
+          >
+            <span className="message-gutter">
+              <Avatar src={typingUsers[0].avatar} size={30} />
+            </span>
+            <div className="message-body">
+              {group && (
+                <div className="message-meta">
+                  <strong>{typingUsers[0].name}</strong>
+                </div>
+              )}
+              <div className="bubble typing-bubble" aria-hidden="true">
+                <span>typing</span>
+                <span className="typing-dots">
+                  <i /><i /><i />
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
         <div ref={endRef} />
       </div>
 
@@ -283,19 +371,34 @@ export default function ChatPanel({
         )}
         <textarea
           value={draft}
-          onChange={(event) => setDraft(event.target.value.slice(0, MAX_LENGTH))}
+          disabled={!canSend}
+          onChange={(event) => updateDraft(event.target.value)}
+          onBlur={() => {
+            if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
+            typingTimerRef.current = null;
+            if (typingSentRef.current) onTypingChange?.(conversation._id, false);
+            typingSentRef.current = false;
+          }}
           onKeyDown={onKeyDown}
           maxLength={MAX_LENGTH}
           rows={1}
-          placeholder={`Message ${titleOf(conversation, me._id)}`}
+          placeholder={
+            canSend
+              ? `Message ${titleOf(conversation, me._id)}`
+              : "You need to be friends before you can send messages"
+          }
           aria-label="Write a message"
         />
         <div className="composer-tools">
-          <span className="composer-hint">Enter to send, Shift + Enter for a new line</span>
+          <span className="composer-hint">
+            {canSend
+              ? "Enter to send, Shift + Enter for a new line"
+              : "This direct message is read-only until the friendship is accepted"}
+          </span>
           {draft.length > MAX_LENGTH - 200 && (
             <span className="composer-count">{MAX_LENGTH - draft.length}</span>
           )}
-          <button type="submit" disabled={!trimmed}>Send</button>
+          <button type="submit" disabled={!trimmed || !canSend}>Send</button>
         </div>
       </form>
     </section>

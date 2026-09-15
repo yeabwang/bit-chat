@@ -13,11 +13,24 @@ import {
   friendshipParamsSchema,
   sendFriendRequestSchema,
 } from "../validators/friend.validator";
+import { emitToUsers, SOCKET_EVENTS } from "../lib/socket";
+
+const notifyFriendshipChanged = (friendship: {
+  requester: unknown;
+  recipient: unknown;
+}) => {
+  emitToUsers(
+    [String(friendship.requester), String(friendship.recipient)],
+    SOCKET_EVENTS.FRIENDSHIP_CHANGED,
+    {},
+  );
+};
 
 export const sendFriendRequestController = asyncHandler(
   async (req: Request, res: Response) => {
     const body = sendFriendRequestSchema.parse(req.body);
     const { friendship, created } = await sendFriendRequestService(req.user!._id, body);
+    notifyFriendshipChanged(friendship);
 
     // 201 for a new pending request, 200 when their existing request was
     // accepted instead — both are successes from the caller's point of view
@@ -32,6 +45,7 @@ export const acceptFriendRequestController = asyncHandler(
   async (req: Request, res: Response) => {
     const { id } = friendshipParamsSchema.parse(req.params);
     const friendship = await acceptFriendRequestService(req.user!._id, id);
+    notifyFriendshipChanged(friendship);
 
     return res
       .status(HTTPSTATUS.OK)
@@ -42,7 +56,8 @@ export const acceptFriendRequestController = asyncHandler(
 export const removePendingRequestController = asyncHandler(
   async (req: Request, res: Response) => {
     const { id } = friendshipParamsSchema.parse(req.params);
-    await removePendingRequestService(req.user!._id, id);
+    const friendship = await removePendingRequestService(req.user!._id, id);
+    notifyFriendshipChanged(friendship);
 
     return res.status(HTTPSTATUS.OK).json({ message: "Request removed" });
   },
@@ -51,7 +66,8 @@ export const removePendingRequestController = asyncHandler(
 export const removeFriendController = asyncHandler(
   async (req: Request, res: Response) => {
     const { id } = friendshipParamsSchema.parse(req.params);
-    await removeFriendService(req.user!._id, id);
+    const friendship = await removeFriendService(req.user!._id, id);
+    notifyFriendshipChanged(friendship);
 
     return res.status(HTTPSTATUS.OK).json({ message: "Friend removed" });
   },
