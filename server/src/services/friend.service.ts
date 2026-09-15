@@ -211,7 +211,11 @@ export const getPendingRequestsService = async (userId: Types.ObjectId) => {
 
   for (const row of rows) {
     const iSent = String(row.requester._id ?? row.requester) === me;
-    const view = { _id: row._id, user: iSent ? row.recipient : row.requester };
+    const view = {
+      _id: row._id,
+      user: iSent ? row.recipient : row.requester,
+      createdAt: row.createdAt,
+    };
     if (iSent) outgoing.push(view);
     else incoming.push(view);
   }

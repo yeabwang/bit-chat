@@ -65,13 +65,15 @@ export const getUserConversationsController = asyncHandler(
   },
 );
 
-// POST /:id/read - the caller has seen everything up to now; the list reports
-// unreadCount from this mark. Nothing is broadcast: only the reader's own count changes.
+// POST /:id/read - the caller has seen everything up to now. Broadcasting to
+// the conversation updates the sender's receipt and the reader's other tabs.
 export const markReadController = asyncHandler(async (req: Request, res: Response) => {
   const { id } = conversationIdSchema.parse(req.params);
-  await markReadService(req.user!._id, id);
-  emitToUsers([String(req.user!._id)], SOCKET_EVENTS.CONVERSATION_READ, {
+  const readAt = await markReadService(req.user!._id, id);
+  emitToConversation(id, SOCKET_EVENTS.CONVERSATION_READ, {
     conversationId: id,
+    readerId: String(req.user!._id),
+    readAt,
   });
 
   return res.status(HTTPSTATUS.OK).json({ message: "Conversation marked read" });

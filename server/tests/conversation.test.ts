@@ -276,8 +276,10 @@ test("marking read stamps the caller's own key and is scoped to membership", asy
   t.after(() => mock.restoreAll());
   const update = mock.method(ConversationModel, "updateOne", (() =>
     Promise.resolve({ matchedCount: 1 })) as never);
+  const updateMessages = mock.method(MessageModel, "updateMany", (() =>
+    Promise.resolve({ modifiedCount: 2 })) as never);
 
-  await markReadService(ME, CONVERSATION_ID);
+  const readAt = await markReadService(ME, CONVERSATION_ID);
 
   const [filter, change] = callArgs(update) as [
     Record<string, unknown>,
@@ -285,17 +287,28 @@ test("marking read stamps the caller's own key and is scoped to membership", asy
   ];
   assert.deepEqual(filter, { _id: CONVERSATION_ID, participants: ME });
   assert.deepEqual(Object.keys(change.$set as object), [`lastReadAt.${ME}`]);
+  assert.equal((change.$set as Record<string, unknown>)[`lastReadAt.${ME}`], readAt);
+  assert.deepEqual(callArgs(updateMessages)[0], {
+    conversationId: CONVERSATION_ID,
+    sender: { $ne: ME },
+    createdAt: { $lte: readAt },
+    readBy: { $ne: ME },
+  });
+  assert.deepEqual(callArgs(updateMessages)[1], { $addToSet: { readBy: ME } });
 });
 
 test("marking read a conversation you are not in is a 404", async (t) => {
   t.after(() => mock.restoreAll());
   mock.method(ConversationModel, "updateOne", (() =>
     Promise.resolve({ matchedCount: 0 })) as never);
+  const updateMessages = mock.method(MessageModel, "updateMany", (() =>
+    Promise.resolve({ modifiedCount: 0 })) as never);
 
   await assert.rejects(
     markReadService(ME, CONVERSATION_ID),
     (error: { statusCode?: number }) => error.statusCode === 404,
   );
+  assert.equal(updateMessages.mock.callCount(), 0);
 });
 
 test("a non participant gets a 404 from a conversation read", async (t) => {

@@ -12,6 +12,8 @@ import {
   newConversationPayload,
   putMessage,
   mergeOlderPage,
+  applyReadReceipt,
+  isReadByAll,
   EMPTY_THREAD,
 } from "../src/data/conversation.js";
 
@@ -173,6 +175,29 @@ test("message:new bumps the row and counts unread only when not active", () => {
 
   const [active] = applyMessageToList([dm], message, "c1", "me");
   assert.equal(active.unreadCount, 0);
+});
+
+test("read receipts mark only messages reached by the reader", () => {
+  const thread = {
+    ...EMPTY_THREAD,
+    items: [
+      { _id: "m1", sender: me, createdAt: "2026-09-05T10:00:00.000Z", readBy: [] },
+      { _id: "m2", sender: me, createdAt: "2026-09-05T10:02:00.000Z", readBy: [] },
+      { _id: "m3", sender: jade, createdAt: "2026-09-05T10:00:00.000Z", readBy: [] },
+    ],
+  };
+
+  const next = applyReadReceipt(thread, "jade", "2026-09-05T10:01:00.000Z");
+  assert.deepEqual(next.items[0].readBy, ["jade"]);
+  assert.deepEqual(next.items[1].readBy, []);
+  assert.deepEqual(next.items[2].readBy, []);
+  assert.equal(isReadByAll(next.items[0], dm), true);
+});
+
+test("group receipts require every recipient", () => {
+  const message = { sender: me, readBy: ["jade"] };
+  assert.equal(isReadByAll(message, group), false);
+  assert.equal(isReadByAll({ ...message, readBy: ["jade", "tony"] }, group), true);
 });
 
 test("the sender's socket echo never becomes their own unread message", () => {

@@ -4,7 +4,7 @@ import "./sidebar.css";
 
 const items = [
   { id: "inbox", label: "Inbox", icon: "messages" },
-  { id: "friends", label: "Friend requests", icon: "notification" },
+  { id: "friends", label: "Friend requests", icon: "users" },
 ];
 
 export default function Sidebar({ screen, setScreen, counts = {}, onMobileClose, onLogout }) {

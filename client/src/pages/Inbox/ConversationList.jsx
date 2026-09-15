@@ -17,6 +17,7 @@ export default function ConversationList({
   users,
   me,
   onlineIds,
+  typingByConversation = {},
   activeId,
   onSelect,
   query,
@@ -83,6 +84,10 @@ export default function ConversationList({
           const group = conversation.isGroup;
           const people = avatarsOf(conversation, me._id);
           const count = conversation.unreadCount ?? 0;
+          const typingIds = typingByConversation[conversation._id];
+          const typingParticipant = (conversation.participants ?? []).find(
+            (participant) => participant._id !== me._id && typingIds?.has(participant._id),
+          );
           return (
             <li key={conversation._id}>
               <button
@@ -107,7 +112,14 @@ export default function ConversationList({
                       <span className="member-chip">{memberCount(conversation)}</span>
                     )}
                   </span>
-                  <span className="conversation-preview">{previewOf(conversation, me._id)}</span>
+                  <span
+                    className={`conversation-preview ${typingParticipant ? "is-typing" : ""}`}
+                    aria-label={
+                      typingParticipant ? `${typingParticipant.name} is typing` : undefined
+                    }
+                  >
+                    {typingParticipant ? "typing…" : previewOf(conversation, me._id)}
+                  </span>
                 </span>
 
                 <span className="conversation-meta">

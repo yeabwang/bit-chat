@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { io } from "socket.io-client";
 
 // import.meta.env is undefined outside Vite (node --test), hence the optional chain
@@ -14,12 +14,14 @@ const BASE = import.meta.env?.VITE_API_URL ?? "http://localhost:8000";
  */
 export function useSocket(userId, handlers) {
   const latest = useRef(handlers);
+  const socketRef = useRef(null);
   latest.current = handlers;
 
   useEffect(() => {
     if (!userId) return;
 
     const socket = io(BASE, { withCredentials: true });
+    socketRef.current = socket;
     const dispatch = (event) => (payload) => latest.current[event]?.(payload);
 
     // socket.io emits "connect" on every (re)connect; the server re-runs its
@@ -43,7 +45,12 @@ export function useSocket(userId, handlers) {
     }
 
     return () => {
+      if (socketRef.current === socket) socketRef.current = null;
       socket.disconnect();
     };
   }, [userId]);
+
+  return useCallback((event, payload) => {
+    socketRef.current?.emit(event, payload);
+  }, []);
 }

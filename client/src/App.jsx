@@ -4,6 +4,7 @@ import Signup from "./pages/Signup/Signup";
 import ConversationList from "./pages/Inbox/ConversationList";
 import ChatPanel from "./pages/Inbox/ChatPanel";
 import FriendsScreen from "./pages/Friends/FriendsScreen";
+import NotificationsMenu from "./pages/Notifications/NotificationsScreen";
 import SettingsScreen from "./pages/Settings/SettingsScreen";
 import Modal from "./components/Modal/Modal";
 import AppLayout from "./layouts/AppLayout/AppLayout";
@@ -33,6 +34,7 @@ import {
 } from "./api/messages";
 import {
   applyMessageToList,
+  applyReadReceipt,
   byActivity,
   EMPTY_THREAD,
   mergeOlderPage,
@@ -53,6 +55,8 @@ export default function App() {
   const [friendRequests, setFriendRequests] = useState({ incoming: [], outgoing: [] });
   // seeded from GET /api/users, then presence:* over the socket is authoritative
   const [onlineIds, setOnlineIds] = useState(() => new Set());
+  const [typingByConversation, setTypingByConversation] = useState({});
+  const typingExpiry = useRef(new Map());
   // conversation id -> { items, hasMore, nextCursor, loading }
   const [threads, setThreads] = useState({});
   const requested = useRef(new Set());
@@ -85,6 +89,9 @@ export default function App() {
       setThreads({});
       requested.current.clear();
       setActiveId(null);
+      setTypingByConversation({});
+      for (const timer of typingExpiry.current.values()) window.clearTimeout(timer);
+      typingExpiry.current.clear();
       return;
     }
     let live = true;
@@ -126,10 +133,22 @@ export default function App() {
     (active.participants ?? []).some(
       (participant) => participant._id !== meId && friendIds.has(participant._id),
     );
+  const activeTypingIds = active ? typingByConversation[active._id] : null;
+  const typingUsers = active
+    ? (active.participants ?? []).filter(
+        (participant) =>
+          participant._id !== meId && activeTypingIds?.has(participant._id),
+      )
+    : [];
 
+  const unreadCount = conversations.reduce(
+    (total, conversation) => total + (conversation.unreadCount ?? 0),
+    0,
+  );
+  const incomingRequestCount = friendRequests.incoming.length;
   const counts = {
-    inbox: conversations.reduce((total, c) => total + (c.unreadCount ?? 0), 0),
-    friends: friendRequests.incoming.length,
+    inbox: unreadCount,
+    friends: incomingRequestCount,
   };
 
   const selectScreen = (next) => {
@@ -149,8 +168,48 @@ export default function App() {
   const activeRef = useRef(null);
   activeRef.current = active?._id ?? null;
 
-  // server/docs/protocol.md - fanout only, the client emits nothing
-  useSocket(meId, {
+  const setTypingPresence = useCallback((conversationId, userId, isTyping) => {
+    if (!conversationId || !userId) return;
+    const key = `${conversationId}:${userId}`;
+    const oldTimer = typingExpiry.current.get(key);
+    if (oldTimer) window.clearTimeout(oldTimer);
+
+    setTypingByConversation((all) => {
+      const current = all[conversationId] ?? new Set();
+      const next = new Set(current);
+      if (isTyping) next.add(userId);
+      else next.delete(userId);
+      if (next.size === 0) {
+        const { [conversationId]: _removed, ...rest } = all;
+        return rest;
+      }
+      return { ...all, [conversationId]: next };
+    });
+
+    if (isTyping) {
+      typingExpiry.current.set(
+        key,
+        window.setTimeout(() => {
+          typingExpiry.current.delete(key);
+          setTypingPresence(conversationId, userId, false);
+        }, 3500),
+      );
+    } else {
+      typingExpiry.current.delete(key);
+    }
+  }, []);
+
+  useEffect(
+    () => () => {
+      for (const timer of typingExpiry.current.values()) window.clearTimeout(timer);
+      typingExpiry.current.clear();
+    },
+    [],
+  );
+
+  // Realtime fanout. The only client-originated events are ephemeral typing
+  // states; the server verifies conversation membership before forwarding.
+  const emitSocket = useSocket(meId, {
     "presence:sync": ({ userIds }) => setOnlineIds(new Set(userIds)),
     "presence:online": ({ userId }) =>
       setOnlineIds((ids) => new Set(ids).add(userId)),
@@ -162,6 +221,11 @@ export default function App() {
       }),
     "message:new": ({ message }) => {
       const normalized = normalizeMessage(message);
+      setTypingPresence(
+        normalized.conversationId,
+        normalized.sender?._id,
+        false,
+      );
       const seen = document.visibilityState === "visible" ? activeRef.current : null;
       if (requested.current.has(normalized.conversationId)) {
         patchThread(normalized.conversationId, (thread) => putMessage(thread, normalized));
@@ -184,24 +248,45 @@ export default function App() {
         setMobileView("list");
       }
     },
-    "conversation:read": ({ conversationId }) =>
-      setConversations((all) =>
-        all.map((conversation) =>
-          conversation._id === conversationId
-            ? { ...conversation, unreadCount: 0 }
-            : conversation,
-        ),
-      ),
+    "conversation:read": ({ conversationId, readerId, readAt }) => {
+      if (readerId === meId) {
+        setConversations((all) =>
+          all.map((conversation) =>
+            conversation._id === conversationId
+              ? { ...conversation, unreadCount: 0 }
+              : conversation,
+          ),
+        );
+      }
+      if (requested.current.has(conversationId)) {
+        patchThread(conversationId, (thread) =>
+          applyReadReceipt(thread, readerId, readAt),
+        );
+      }
+    },
+    "typing:start": ({ conversationId, userId }) =>
+      setTypingPresence(conversationId, userId, true),
+    "typing:stop": ({ conversationId, userId }) =>
+      setTypingPresence(conversationId, userId, false),
     "friendship:changed": () => refreshSocial().catch(() => {}),
     reconnect: () => {
       listConversations().then(setConversations).catch(() => {});
       refreshSocial().catch(() => {});
       requested.current.clear();
       setThreads({});
+      setTypingByConversation({});
       setEpoch((n) => n + 1);
     },
     unauthorized: signOut,
   });
+
+  const sendTyping = useCallback(
+    (conversationId, isTyping) => {
+      if (!conversationId) return;
+      emitSocket(isTyping ? "typing:start" : "typing:stop", { conversationId });
+    },
+    [emitSocket],
+  );
 
   // GET /api/conversations/:id/messages
   useEffect(() => {
@@ -331,6 +416,7 @@ export default function App() {
         sender: me,
         content,
         replyTo,
+        readBy: [],
         createdAt: new Date().toISOString(),
         pending: true,
       };
@@ -426,6 +512,7 @@ export default function App() {
               users={friendUsers}
               me={me}
               onlineIds={onlineIds}
+              typingByConversation={typingByConversation}
               activeId={active?._id ?? null}
               onSelect={openConversation}
               query={query}
@@ -442,8 +529,10 @@ export default function App() {
               loading={activeThread.loading}
               hasMore={activeThread.hasMore}
               canSend={canSendToActive}
+              typingUsers={typingUsers}
               onLoadOlder={loadOlder}
               onSend={sendMessage}
+              onTypingChange={sendTyping}
               onAddMembers={() => setModal("members")}
               onRename={renameGroup}
               onLeave={leaveGroup}
@@ -473,6 +562,16 @@ export default function App() {
         onCreate={startConversation}
         onAddMembers={addMembers}
         close={() => setModal(null)}
+      />
+      <NotificationsMenu
+        conversations={ordered}
+        requests={friendRequests}
+        me={me}
+        onOpenConversation={(conversationId) => {
+          setScreen("inbox");
+          openConversation(conversationId);
+        }}
+        onOpenRequests={() => selectScreen("friends")}
       />
     </AppLayout>
   );

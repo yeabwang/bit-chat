@@ -474,7 +474,7 @@ When the last member leaves, the group and its messages are deleted.
 
 ## POST /api/conversations/:id/read
 
-Marks everything in the conversation as seen by the caller, as of now. There is no body. `GET /api/conversations` then reports `unreadCount: 0` for it until someone else sends again. Nothing is broadcast: only the caller's own count changes.
+Marks everything in the conversation as seen by the caller, as of now. There is no body. `GET /api/conversations` then reports `unreadCount: 0` for it until someone else sends again. The server also adds the caller to each reached message's `readBy` list and broadcasts `conversation:read` so receipts and the caller's other tabs update immediately.
 
 | Status | When                                          | Body                                                                   |
 | ------ | --------------------------------------------- | ---------------------------------------------------------------------- |
